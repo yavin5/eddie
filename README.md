@@ -104,7 +104,8 @@ Individual user message:
       "hasAvatar": false,
       "mobileCoinAddress": null
     }
-}]```
+}]
+```
 
 ##### Interacting with Groups
 
@@ -472,7 +473,7 @@ startBot().catch(console.error);
 - Create a shell user to run the server as.. named something like `eddieuser`.
 - Clone the eddie bot source repository into that user's home directory.
 - Run the following command as the root user in order to run the bot as a daemon:
-     # runuser -s /bin/bash - eddieuser -c "cd /home/eddieuser/git/eddie; npm start" &>>eddie.log &
+     runuser -s /bin/bash - eddieuser -c "cd /home/eddieuser/git/eddie; npm start" &>>eddie.log &
 		    
 #### AI Code Generation Try Number 1..
 
