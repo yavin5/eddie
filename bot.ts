@@ -45,52 +45,71 @@ function getBotName(): Promise<string> {
     });
 }
 
-// Trust all the user's keys, in case anything changed.
-function trustAllKeys(recipient: string) {
-    const command = `${signalCliPath} -a ${botPhoneNumber} trust -a ${recipient}`;
-    console.log(command);
-    exec(command);
-}
-
 // Send a message via signal-cli
 function sendMessage(recipient: string, message: string): void {
-    // Trust all of the user's keys before each send, otherwise the user may not see the message.
-    trustAllKeys(recipient);
-
-    const command = `${signalCliPath} -u ${botPhoneNumber} send -m "${message}" ${recipient}`;
+    let recipientCli: string = recipient;
+    if (recipient.endsWith('=')) {
+        recipientCli = `-g ${recipientCli}`;
+    }
+    const command = `${signalCliPath} -u ${botPhoneNumber} send -m "${message}" ${recipientCli}`;
     console.log(command);
     exec(command);
 }
 
 // Handle incoming messages
-async function handleMessage(botName: string, message: any): Promise<void> {
-    const envelope = message.envelope;
+async function handleMessage(botName: string, envelope: any): Promise<void> {
     //if (envelope == null) return;
     const sender = envelope.source;
-    const groupId = envelope.sourceGroupId;
-    const content = envelope.dataMessage?.message || '';
+    const senderUuid = envelope.sourceUuid
+    const dataMessage = envelope.dataMessage || '';
+    const groupInfo = dataMessage.groupInfo || '';
+    const groupId = dataMessage.groupInfo?.groupId || '';
+    const content = dataMessage.message || '';
 
     if (administrators.has(sender)) {
         if (content.startsWith('/admin ')) {
             const newAdmin = content.split(' ')[1];
+	    // TODO: look up and use the user's account ID.
             administrators.add(newAdmin);
             sendMessage(sender, `Added ${newAdmin} as an administrator.`);
         } else if (content.startsWith('/ignore ')) {
             const target = content.split(' ')[1];
+	    // TODO: look up and use the user's account ID.
             ignoredUsers.add(target);
             sendMessage(sender, `Ignored ${target}.`);
         }
     }
 
     if (groupId) {
+        // It's a group message.
+	console.log(`GROUP MESSAGE. groupId=${groupId}`);
         // TODO: Support: "@Bot message" or "Bot: message" or "Bot message" (?)
-        if (content.startsWith(botName)) {
+	// For now, support @Bot mentions and cases where the message begins
+	// with the bot name, only.
+	// Check to see if it was a mention of the bot.
+	if (dataMessage.mentions) {
+	    const mention = dataMessage.mentions.find((mention: any) =>
+	        mention.number === botPhoneNumber ||
+		mention.uuid === botPhoneNumber);
+	    if (mention) {
+	      	console.log(`Saying this to LLM: ` + content);
+	        const response = await queryLLM(content);
+                console.log(`Response from LLM : ` + response);
+                sendMessage(groupId, response);
+	    }
+	}
+
+	// Check to see if the bot's name is on the front of the message.
+        if (content.toLowerCase().startsWith(botName.toLowerCase())) {
+            console.log(`Saying this to LLM: ` + content);
             const response = await queryLLM(content);
+            console.log(`Response from LLM : ` + response);
             sendMessage(groupId, response);
         }
     } else {
-        if (!ignoredUsers.has(sender)) {
-            if (!activeChats.has(sender)) {
+        // NOT a group message.
+        if (!ignoredUsers.has(sender) && !ignoredUsers.has(senderUuid))  {
+            if (!activeChats.has(sender) && !activeChats.has(senderUuid)) {
                 sendMessage(sender, `Hello! I'm ${botName}. How can I assist you today?`);
                 activeChats.add(sender);
             } else {
@@ -120,7 +139,7 @@ async function queryLLM(message: string): Promise<string> {
 async function processQueuedMessages(botName: string, receivedArray: Array<any>) {
     // Process queued messages while the receive command isn't running.
     while (receivedArray.length > 0) {
-        await handleMessage(botName, receivedArray.shift());
+        await handleMessage(botName, receivedArray.shift() /*envelope*/);
     }
 }
 
@@ -134,13 +153,13 @@ async function startBot() {
     let receivedArray: Array<any> = [];
     // This is the server's forever loop, to stay running.
     while (true) {
-        let envelope: any = { dataMessage: {} };
+        let signalMessage: any;
 	// Run the receiver process to receive messages from other users.
-	const command = `${signalCliPath} --trust-new-identities=always -u ${botPhoneNumber} receive --send-read-receipts -t 2`;
+	const command = `${signalCliPath} --output=json --trust-new-identities=always -u ${botPhoneNumber} receive --send-read-receipts`;
 	//console.log(command);
 	const childProcess = exec(command);
 	childProcess.on('exit', async (code) => {
-	    myConsole.log(`Receive exited. Total messages received: ` + receivedArray.length);
+	    //myConsole.log(`Receive exited. Total messages received: ` + receivedArray.length);
             if (receivedArray.length > 0) {
                 // Sleep for a short time before processing messages.
 		// TODO: This is a hack / wrong. Instead, it should wait for the receive
@@ -160,28 +179,21 @@ async function startBot() {
 
         // Parse the received message lines, one at a time, queue any messages.
         rl.on('line', async (line) => {
-            console.log(`LINE: ` + line);
-            // Parse signal-cli output and construct a message envelope
-            if (line.startsWith('Envelope from:')) {
-                const [_, source] = line.split('” ');
-	        const [number, junk] = source.split(' ');
-                envelope.source = number.trim();
-            } else if (line.startsWith('Source group:')) {
-                const [_, sourceGroupId] = line.split('Source group: ');
-                envelope.sourceGroupId = sourceGroupId.trim();
-            } else if (line.startsWith('Timestamp:')) {
-                const [_, timestamp] = line.split('Timestamp: ');
-                envelope.timestamp = parseInt(timestamp.trim(), 10);
-            } else if (line.startsWith('Body:')) {
-                const [_, message] = line.split('Body: ');
-                envelope.dataMessage.message = message.trim();
-		console.log(`Received: ` + message.trim());
-
-                // Enqueue the text message.
-		receivedArray.push({ envelope });
-		console.log(`Enqueued.`);
-	        envelope = { dataMessage: {} };
+            console.log(`RECEIVED: ` + line);
+            // Parse signal-cli output and construct a signalMessage object
+	    try {
+                const signalMessage = JSON.parse(line);
+		const envelope = signalMessage.envelope;
+		// TODO: support more message types such as images.
+                if (envelope && signalMessage.envelope.dataMessage) {
+	            // Enqueue the message.
+		    receivedArray.push(envelope);
+                    console.log(`Enqueued.`);
+                }
+            } catch (parseError) {
+                console.log(parseError);
             }
+
         });
 
         // Sleep for a short time before receiving again.
@@ -189,7 +201,7 @@ async function startBot() {
 
         childProcess.kill();
 
-	console.log(`Main loop.`);
+	//console.log(`Main loop.`);
     }
 }
 
