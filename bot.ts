@@ -23,10 +23,9 @@ const activeChats = new Set<string>();
 const ignoredUsers = new Set<string>();
 
 // Get bot's name from the Signal profile
-// This is currently broken because the bot account doesn't have itself in its contact list.
 function getBotName(): Promise<string> {
     return new Promise((resolve, reject) => {
-        exec(`${signalCliPath} --output=json -u ${botPhoneNumber} listContacts`, (error, stdout, stderr) => {
+        exec(`${signalCliPath} --output=json -u ${botPhoneNumber} listContacts -a ${botPhoneNumber}`, (error, stdout, stderr) => {
             if (error) {
                 return reject(stderr);
             }
@@ -34,10 +33,11 @@ function getBotName(): Promise<string> {
             try {
 	        console.log(stdout);
                 const contacts = JSON.parse(stdout);
-		const botProfile = contacts.find((contact: any) => contact.number === botPhoneNumber);
-	    	console.log("Bot's profile: ${botProfile}");
-                if (botProfile && botProfile.name) {
-                    resolve(botProfile.profileName);
+		const contact = contacts[0];
+		const profile = contact?.profile || '';
+                //console.log(`Bot's profile: ${profile}`);
+                if (profile && profile.givenName) {
+                    resolve(profile.givenName);
                 } else {
                     resolve('Bot');
                 }
@@ -148,8 +148,7 @@ async function processQueuedMessages(botName: string, receivedArray: Array<any>)
 
 // Start the bot
 async function startBot() {
-    //const botName = await getBotName();
-    const botName = `Eddie`;
+    const botName = await getBotName();
     console.log(`Bot name is: ${botName}`);
     const myConsole = console;
 
