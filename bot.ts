@@ -1,21 +1,24 @@
 import { exec } from 'child_process';
 import readline from 'readline';
 import axios from 'axios';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // Update this path to where signal-cli is installed
-const signalCliPath = '/home/jasonb/signal-cli';
+const signalCliPath = process.env.SIGNAL_CLI_PATH!;
 
 // Update with the bot's phone number
-const botPhoneNumber = '+13138806347';
+const botPhoneNumber = process.env.BOT_PHONE_NUMBER!;
 
 // Update with your LLM API URL
-const llmApiUrl = 'http://localhost:11434/api/chat';
+const llmApiUrl = process.env.LLM_API_URL!;
 
 // Update with your LLM model name
-const llmModel = `dolphin-llama3-eddie-4:8b`;
+const llmModel = process.env.LLM_MODEL!;
 
 // Add admin phone numbers
-const administrators = new Set<string>(['+353830679079']);
+const administrators = new Set<string>([process.env.EDDIE_ADMIN_0!]);
 const activeChats = new Set<string>();
 const ignoredUsers = new Set<string>();
 
