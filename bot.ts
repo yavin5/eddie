@@ -17,6 +17,29 @@ const llmApiUrl = process.env.LLM_API_URL!;
 // Update with your LLM model name
 const llmModel = process.env.LLM_MODEL!;
 
+// Prune the chat context messages down to an 8K bytes context window.
+const llmModelContextSize: number = +process.env.LLM_MODEL_CONTEXT_SIZE! || 8192;
+
+// Bot name will be autodetected from the Signal account and changed
+let botName = 'Bot';
+
+// Define the structure of a chat message
+interface ChatMessage {
+    role: string;
+    content: string;
+    //images: Array<??>();
+}
+
+// Define the structure of the conversation context
+interface ConversationContext {
+    chatMessages: ChatMessage[];
+}
+
+// Initialize the conversation context
+const conversationContext: ConversationContext = {
+    chatMessages: [],
+};
+
 // Add admin phone numbers
 const administrators = new Set<string>([process.env.EDDIE_ADMIN_0!]);
 const activeChats = new Set<string>();
@@ -125,11 +148,44 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
     }
 }
 
+function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
+  // Function to calculate the total size in bytes of the content strings
+  const calculateTotalSize = (msgs: ChatMessage[]): number => {
+    return msgs.reduce((acc, msg) => acc + new TextEncoder().encode(msg.content).length, 0);
+  };
+
+  // Start from the end of the array and add messages until we exceed max size
+  let totalSize = 0;
+  const prunedMessages: ChatMessage[] = [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const messageSize = new TextEncoder().encode(messages[i].content).length;
+    if (totalSize + messageSize <= llmModelContextSize) {
+      prunedMessages.unshift(messages[i]);
+      totalSize += messageSize;
+    } else {
+      break;
+    }
+  }
+
+  return prunedMessages;
+}
+
 // Query the local LLM runtime
 async function queryLLM(message: string): Promise<string> {
     try {
         const model = llmModel;
-        const response = await axios.post(llmApiUrl, { model: model, messages: [ { "role": "user", "content": message } ], stream: false });
+
+        // Add the user's message to the conversation context
+        conversationContext.chatMessages.push({ role: 'user', content: message });
+        conversationContext.chatMessages = pruneChatMessages(conversationContext.chatMessages);
+
+        const response = await axios.post(llmApiUrl, { model: model, messages: conversationContext.chatMessages, stream: false });
+        console.log('Context now has ' + conversationContext.chatMessages.length + 'messsages.');
+
+        // Add the LLM's response to the conversation context
+        conversationContext.chatMessages.push({ role: 'assistant', content: response.data.message.content });
+        console.log('Context now has ' + conversationContext.chatMessages.length + 'messsages.');
+
 	//console.log(response); // Uncomment this to see the HTTP response.
 	console.log(`response.data.message.content: '` + response.data.message.content + `'`);
         return response.data.message.content;
@@ -148,7 +204,7 @@ async function processQueuedMessages(botName: string, receivedArray: Array<any>)
 
 // Start the bot
 async function startBot() {
-    const botName = await getBotName();
+    botName = await getBotName();
     console.log(`Bot name is: ${botName}`);
     const myConsole = console;
 
