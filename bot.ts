@@ -25,24 +25,22 @@ let botName = 'Bot';
 
 // Define the structure of a chat message
 interface ChatMessage {
-    role: string;
-    content: string;
-    //images: Array<??>();
+    role: string;     // This has to be 'system', 'user', or 'assistant'
+    content: string;  // The text message sent either by a user or the bot
+    images: string[]; // Images that go with the message, if any
 }
 
-// Define the structure of the conversation context
+// Define the structure of the conversation context, per contact or per group
 interface ConversationContext {
     chatMessages: ChatMessage[];
 }
 
-// Initialize the conversation context
-const conversationContext: ConversationContext = {
-    chatMessages: [],
-};
+// Map account IDs / group IDs to their ConversationContexts.
+// This is how we separate content per contact / per group.
+let idToConversationContextMap: { [key: string]: ConversationContext } = {};
 
 // Add admin phone numbers
 const administrators = new Set<string>([process.env.EDDIE_ADMIN_0!]);
-const activeChats = new Set<string>();
 const ignoredUsers = new Set<string>();
 
 // Get bot's name from the Signal profile
@@ -118,8 +116,11 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
 	        mention.number === botPhoneNumber ||
 		mention.uuid === botPhoneNumber);
 	    if (mention) {
+	        if (!idToConversationContextMap[groupId]) {
+		   idToConversationContextMap[groupId] = { chatMessages: [] };
+		}
 	      	console.log(`Saying this to LLM: ` + content);
-	        const response = await queryLLM(content);
+	        const response = await queryLLM(content, groupId);
                 console.log(`Response from LLM : ` + response);
                 sendMessage(groupId, response);
 	    }
@@ -127,23 +128,24 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
 
 	// Check to see if the bot's name is on the front of the message.
         if (content.toLowerCase().startsWith(botName.toLowerCase())) {
+	    if (!idToConversationContextMap[groupId]) {
+                idToConversationContextMap[groupId] = { chatMessages: [] };
+            }
             console.log(`Saying this to LLM: ` + content);
-            const response = await queryLLM(content);
+            const response = await queryLLM(content, groupId);
             console.log(`Response from LLM : ` + response);
             sendMessage(groupId, response);
         }
     } else {
         // NOT a group message.
         if (!ignoredUsers.has(sender) && !ignoredUsers.has(senderUuid))  {
-            if (!activeChats.has(sender) && !activeChats.has(senderUuid)) {
-                sendMessage(sender, `Hello! I'm ${botName}. How can I assist you today?`);
-                activeChats.add(sender);
-            } else {
-	      	console.log(`Saying this to LLM: ` + content);
-                const response = await queryLLM(content);
-                console.log(`Response from LLM : ` + response);
-                sendMessage(sender, response);
+            if (!idToConversationContextMap[senderUuid]) {
+                idToConversationContextMap[senderUuid] = { chatMessages: [] };
             }
+            console.log(`Saying this to LLM: ` + content);
+            const response = await queryLLM(content, senderUuid);
+            console.log(`Response from LLM : ` + response);
+            sendMessage(sender, response);
         }
     }
 }
@@ -171,23 +173,29 @@ function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
 }
 
 // Query the local LLM runtime
-async function queryLLM(message: string): Promise<string> {
+async function queryLLM(message: string, conversationId: string): Promise<string> {
     try {
         const model = llmModel;
 
+        // Look up the ConversationContext by its conversation ID (sender UUID or group ID).
+        const conversationContext = idToConversationContextMap[conversationId];
+	if (conversationContext.chatMessages === null) {
+	    conversationContext.chatMessages = [];
+	}
+
         // Add the user's message to the conversation context
-        conversationContext.chatMessages.push({ role: 'user', content: message });
+        conversationContext.chatMessages.push({ role: 'user', content: message, images: [] });
         conversationContext.chatMessages = pruneChatMessages(conversationContext.chatMessages);
 
         const response = await axios.post(llmApiUrl, { model: model, messages: conversationContext.chatMessages, stream: false });
-        console.log('Context now has ' + conversationContext.chatMessages.length + 'messsages.');
+        console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
 
         // Add the LLM's response to the conversation context
-        conversationContext.chatMessages.push({ role: 'assistant', content: response.data.message.content });
-        console.log('Context now has ' + conversationContext.chatMessages.length + 'messsages.');
+        conversationContext.chatMessages.push({ role: 'assistant', content: response.data.message.content, images: [] });
+        console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
 
 	//console.log(response); // Uncomment this to see the HTTP response.
-	console.log(`response.data.message.content: '` + response.data.message.content + `'`);
+        console.log(`response.data.message.content: '` + response.data.message.content + `'`);
         return response.data.message.content;
     } catch (error) {
         console.error('Error querying LLM:', error);
