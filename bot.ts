@@ -52,10 +52,10 @@ function getBotName(): Promise<string> {
             }
 
             try {
-	        console.log(stdout);
+                console.log(stdout);
                 const contacts = JSON.parse(stdout);
-		const contact = contacts[0];
-		const profile = contact?.profile || '';
+                const contact = contacts[0];
+                const profile = contact?.profile || '';
                 //console.log(`Bot's profile: ${profile}`);
                 if (profile && profile.givenName) {
                     resolve(profile.givenName);
@@ -93,12 +93,12 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
     if (administrators.has(sender)) {
         if (content.startsWith('/admin ')) {
             const newAdmin = content.split(' ')[1];
-	    // TODO: look up and use the user's account ID.
+            // TODO: look up and use the user's account ID.
             administrators.add(newAdmin);
             sendMessage(sender, `Added ${newAdmin} as an administrator.`);
         } else if (content.startsWith('/ignore ')) {
             const target = content.split(' ')[1];
-	    // TODO: look up and use the user's account ID.
+            // TODO: look up and use the user's account ID.
             ignoredUsers.add(target);
             sendMessage(sender, `Ignored ${target}.`);
         }
@@ -106,29 +106,29 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
 
     if (groupId) {
         // It's a group message.
-	console.log(`GROUP MESSAGE. groupId=${groupId}`);
+        console.log(`GROUP MESSAGE. groupId=${groupId}`);
         // TODO: Support: "@Bot message" or "Bot: message" or "Bot message" (?)
-	// For now, support @Bot mentions and cases where the message begins
-	// with the bot name, only.
-	// Check to see if it was a mention of the bot.
-	if (dataMessage.mentions) {
-	    const mention = dataMessage.mentions.find((mention: any) =>
-	        mention.number === botPhoneNumber ||
-		mention.uuid === botPhoneNumber);
-	    if (mention) {
-	        if (!idToConversationContextMap[groupId]) {
-		   idToConversationContextMap[groupId] = { chatMessages: [] };
-		}
-	      	console.log(`Saying this to LLM: ` + content);
-	        const response = await queryLLM(content, groupId);
+        // For now, support @Bot mentions and cases where the message begins
+        // with the bot name, only.
+        // Check to see if it was a mention of the bot.
+        if (dataMessage.mentions) {
+            const mention = dataMessage.mentions.find((mention: any) =>
+                mention.number === botPhoneNumber ||
+                mention.uuid === botPhoneNumber);
+            if (mention) {
+                if (!idToConversationContextMap[groupId]) {
+                    idToConversationContextMap[groupId] = { chatMessages: [] };
+                }
+                console.log(`Saying this to LLM: ` + content);
+                const response = await queryLLM(content, groupId);
                 console.log(`Response from LLM : ` + response);
                 sendMessage(groupId, response);
-	    }
-	}
+            }
+        }
 
-	// Check to see if the bot's name is on the front of the message.
+        // Check to see if the bot's name is on the front of the message.
         if (content.toLowerCase().startsWith(botName.toLowerCase())) {
-	    if (!idToConversationContextMap[groupId]) {
+            if (!idToConversationContextMap[groupId]) {
                 idToConversationContextMap[groupId] = { chatMessages: [] };
             }
             console.log(`Saying this to LLM: ` + content);
@@ -138,7 +138,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
         }
     } else {
         // NOT a group message.
-        if (!ignoredUsers.has(sender) && !ignoredUsers.has(senderUuid))  {
+        if (!ignoredUsers.has(sender) && !ignoredUsers.has(senderUuid)) {
             if (!idToConversationContextMap[senderUuid]) {
                 idToConversationContextMap[senderUuid] = { chatMessages: [] };
             }
@@ -151,25 +151,25 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
 }
 
 function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
-  // Function to calculate the total size in bytes of the content strings
-  const calculateTotalSize = (msgs: ChatMessage[]): number => {
-    return msgs.reduce((acc, msg) => acc + new TextEncoder().encode(msg.content).length, 0);
-  };
+    // Function to calculate the total size in bytes of the content strings
+    const calculateTotalSize = (msgs: ChatMessage[]): number => {
+        return msgs.reduce((acc, msg) => acc + new TextEncoder().encode(msg.content).length, 0);
+    };
 
-  // Start from the end of the array and add messages until we exceed max size
-  let totalSize = 0;
-  const prunedMessages: ChatMessage[] = [];
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const messageSize = new TextEncoder().encode(messages[i].content).length;
-    if (totalSize + messageSize <= llmModelContextSize) {
-      prunedMessages.unshift(messages[i]);
-      totalSize += messageSize;
-    } else {
-      break;
+    // Start from the end of the array and add messages until we exceed max size
+    let totalSize = 0;
+    const prunedMessages: ChatMessage[] = [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const messageSize = new TextEncoder().encode(messages[i].content).length;
+        if (totalSize + messageSize <= llmModelContextSize) {
+            prunedMessages.unshift(messages[i]);
+            totalSize += messageSize;
+        } else {
+            break;
+        }
     }
-  }
 
-  return prunedMessages;
+    return prunedMessages;
 }
 
 // Query the local LLM runtime
@@ -179,9 +179,9 @@ async function queryLLM(message: string, conversationId: string): Promise<string
 
         // Look up the ConversationContext by its conversation ID (sender UUID or group ID).
         const conversationContext = idToConversationContextMap[conversationId];
-	if (conversationContext.chatMessages === null) {
-	    conversationContext.chatMessages = [];
-	}
+        if (conversationContext.chatMessages === null) {
+            conversationContext.chatMessages = [];
+        }
 
         // Add the user's message to the conversation context
         conversationContext.chatMessages.push({ role: 'user', content: message, images: [] });
@@ -194,7 +194,7 @@ async function queryLLM(message: string, conversationId: string): Promise<string
         conversationContext.chatMessages.push({ role: 'assistant', content: response.data.message.content, images: [] });
         console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
 
-	//console.log(response); // Uncomment this to see the HTTP response.
+        //console.log(response); // Uncomment this to see the HTTP response.
         console.log(`response.data.message.content: '` + response.data.message.content + `'`);
         return response.data.message.content;
     } catch (error) {
@@ -220,21 +220,21 @@ async function startBot() {
     // This is the server's forever loop, to stay running.
     while (true) {
         let signalMessage: any;
-	// Run the receiver process to receive messages from other users.
-	const command = `${signalCliPath} --output=json --trust-new-identities=always -u ${botPhoneNumber} receive --send-read-receipts`;
-	//console.log(command);
-	const childProcess = exec(command);
-	childProcess.on('exit', async (code) => {
-	    //myConsole.log(`Receive exited. Total messages received: ` + receivedArray.length);
+        // Run the receiver process to receive messages from other users.
+        const command = `${signalCliPath} --output=json --trust-new-identities=always -u ${botPhoneNumber} receive --send-read-receipts`;
+        //console.log(command);
+        const childProcess = exec(command);
+        childProcess.on('exit', async (code) => {
+            //myConsole.log(`Receive exited. Total messages received: ` + receivedArray.length);
             if (receivedArray.length > 0) {
                 // Sleep for a short time before processing messages.
-		// TODO: This is a hack / wrong. Instead, it should wait for the receive
-		// process to finish reading received lines and only then begin processing.
+                // TODO: This is a hack / wrong. Instead, it should wait for the receive
+                // process to finish reading received lines and only then begin processing.
                 await new Promise((r) => setTimeout(r, 1000)); // 1 second
 
                 processQueuedMessages(botName, receivedArray);
             }
-	});
+        });
 
         // Receive any message text lines from Signal and queue them in the receivedArray.
         const rl = readline.createInterface({
@@ -247,13 +247,13 @@ async function startBot() {
         rl.on('line', async (line) => {
             console.log(`RECEIVED: ` + line);
             // Parse signal-cli output and construct a signalMessage object
-	    try {
+            try {
                 const signalMessage = JSON.parse(line);
-		const envelope = signalMessage.envelope;
-		// TODO: support more message types such as images.
+                const envelope = signalMessage.envelope;
+                // TODO: support more message types such as images.
                 if (envelope && signalMessage.envelope.dataMessage) {
-	            // Enqueue the message.
-		    receivedArray.push(envelope);
+                    // Enqueue the message.
+                    receivedArray.push(envelope);
                     console.log(`Enqueued.`);
                 }
             } catch (parseError) {
@@ -263,11 +263,11 @@ async function startBot() {
         });
 
         // Sleep for a short time before receiving again.
-	await new Promise((r) => setTimeout(r, 3000));
+        await new Promise((r) => setTimeout(r, 3000));
 
         childProcess.kill();
 
-	//console.log(`Main loop.`);
+        //console.log(`Main loop.`);
     }
 }
 
