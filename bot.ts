@@ -187,16 +187,17 @@ async function queryLLM(message: string, conversationId: string): Promise<string
         conversationContext.chatMessages.push({ role: 'user', content: message, images: [] });
         conversationContext.chatMessages = pruneChatMessages(conversationContext.chatMessages);
 
-        let response = await axios.post(llmApiUrl, { model: model, messages: conversationContext.chatMessages, stream: false });
-        response = response.replace(/(["$`\\])/g,'\\$1');
+        const response = await axios.post(llmApiUrl, { model: model, messages: conversationContext.chatMessages, stream: false });
+        let stringResponse = response.data.message.content;
+        stringResponse = stringResponse.replace(/(["$`\\])/g,'\\$1');
 
         // Add the LLM's response to the conversation context
-        conversationContext.chatMessages.push({ role: 'assistant', content: response.data.message.content, images: [] });
+        conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
         console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
 
         //console.log(response); // Uncomment this to see the HTTP response.
-        console.log(`response.data.message.content: '` + response.data.message.content + `'`);
-        return response.data.message.content;
+        console.log(`stringResponse: '` + stringResponse + `'`);
+        return stringResponse;
     } catch (error) {
         console.error('Error querying LLM:', error);
         return 'Sorry, I am unable to process your request right now.';
