@@ -126,8 +126,10 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
             }
         }
 
-        // Check to see if the bot's name is on the front of the message.
-        if (content.toLowerCase().startsWith(botName.toLowerCase())) {
+        // Check to see if the bot's name is on the front of the message,
+        // or @BotName (a plain text mention) is in the message somewhere.
+        if (content.toLowerCase().startsWith(botName.toLowerCase()) ||
+            content.toLowerCase().includes('@' + botName.toLowerCase)) {
             if (!idToConversationContextMap[groupId]) {
                 idToConversationContextMap[groupId] = { chatMessages: [] };
             }
