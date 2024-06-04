@@ -191,7 +191,7 @@ async function queryLLM(message: string, conversationId: string): Promise<string
 
         const response = await axios.post(llmApiUrl, { model: model, messages: conversationContext.chatMessages, stream: false });
         let stringResponse = response.data.message.content;
-        stringResponse = stringResponse.replace(/(["$\\])/g,'\\$1');
+        stringResponse = stringResponse.replace(/(["$`\\])/g,'\\$1');
 
         // Add the LLM's response to the conversation context
         conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
