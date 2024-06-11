@@ -1,7 +1,9 @@
-import { exec } from 'child_process';
-import readline from 'readline';
+import { PluginLoader } from './plugin/pluginLoader';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { exec } from 'child_process';
+import readline from 'readline';
+import path from 'path';
 
 dotenv.config();
 
@@ -219,7 +221,18 @@ async function startBot() {
     console.log(`Bot name is: ${botName}`);
     const myConsole = console;
 
+    // Get the directory of the current script file
+    const currentDir = path.dirname(__filename);
+    let pluginDir = process.env.PLUGIN_DIR || 'plugin';
+    // Load the plugins.
+    const loader = new PluginLoader(path.join(currentDir, pluginDir));
+    const plugins = await loader.loadPlugins();
+    console.log('Plugin loader loaded LLM functions:');
+    console.log(JSON.stringify(plugins.tools));
+
+    // A queue of messages received from Signal that need processing.
     let receivedArray: Array<any> = [];
+
     // This is the server's forever loop, to stay running.
     while (true) {
         let signalMessage: any;
