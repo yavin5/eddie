@@ -294,12 +294,12 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
             const argumentValue = (oArguments as any)[argumentName];
             // FIXME: support non-string argument values!
             console.log(`Invoker added arg: ${argumentValue}`);
-            if (argumentValue.startsWith('[') &&
-                argumentValue.endsWith(']')) {
+            const argumentStringValue: string = argumentValue.toString();
+            if (argumentStringValue.startsWith('[') &&
+                argumentStringValue.endsWith(']')) {
                 const stringArray: string[] = []
                 funcArgs.push(stringArray);
             } else {
-                const argumentStringValue: string = argumentValue.toString();
                 if (argumentStringValue.length > 0) {
                     funcArgs.push(argumentStringValue);
                 }
