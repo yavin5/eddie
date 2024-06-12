@@ -137,7 +137,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
                 mention.uuid === botPhoneNumber);
             if (mention) {
                 if (!idToConversationContextMap[groupId]) {
-                    idToConversationContextMap[groupId] = { chatMessages: [] };
+                    startNewConversationContext(senderUuid);
                 }
                 console.log(`Saying this to LLM: ` + content);
                 const response = await queryLLM('user', content, groupId, false);
@@ -151,7 +151,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
         if (content.toLowerCase().startsWith(botName.toLowerCase()) ||
             content.toLowerCase().includes('@' + botName.toLowerCase())) {
             if (!idToConversationContextMap[groupId]) {
-                idToConversationContextMap[groupId] = { chatMessages: [] };
+                startNewConversationContext(senderUuid);
             }
             console.log(`Saying this to LLM: ` + content);
             const response = await queryLLM('user', content, groupId, false);
@@ -162,7 +162,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
         // NOT a group message.
         if (!ignoredUsers.has(sender) && !ignoredUsers.has(senderUuid)) {
             if (!idToConversationContextMap[senderUuid]) {
-                idToConversationContextMap[senderUuid] = { chatMessages: [] };
+                startNewConversationContext(senderUuid);
             }
             console.log(`Saying this to LLM: ` + content);
             const response = await queryLLM('user', content, senderUuid, false);
@@ -205,11 +205,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         // Look up the ConversationContext by its conversation ID (sender UUID or group ID).
         const conversationContext = idToConversationContextMap[conversationId];
         if (conversationContext.chatMessages === null) {
-            // Start a new conversation context.
-            conversationContext.chatMessages = [];
-            const toolsApi = plugins.tools?.toString() || '';
-            const jsonSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
-            conversationContext.chatMessages.push({role: 'system', content: jsonSystemMessage, images: [] });
+            startNewConversationContext(conversationId);
         }
 
         // Add the user's message to the conversation context
@@ -252,6 +248,15 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         console.error('Error querying LLM:', error);
         return 'Sorry, I am unable to process your request right now.';
     }
+}
+
+function startNewConversationContext(conversationId: string) {
+    let chatMessages = [];
+    const toolsApi = plugins.tools?.toString() || '';
+    const jsonSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
+    //console.log(jsonSystemMessage);
+    chatMessages.push({ role: 'system', content: jsonSystemMessage, images: [] });
+    idToConversationContextMap[conversationId] = { chatMessages };
 }
 
 async function invokeLlmFunction(objectMessage: any, conversationContext: ConversationContext, conversationId: string): Promise<string> {
