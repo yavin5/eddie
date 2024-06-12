@@ -35,6 +35,8 @@ class WebScrapePlugin {
         let response;
         try {
             response = await axios.get(url, { params: axiosParams });
+            await new Promise<void>(resolve => setTimeout(() => resolve(), 1000))
+                .then(() => console.log("WebScrapePlugin: httpGet."));
             return response.data;
         } catch (error) {
             response = `HTTP GET request error: ${error}`;

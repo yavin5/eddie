@@ -307,10 +307,9 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
                 }
             }
         }
-        console.log('Invoker: ' + functionName + '(' + funcArgs.toString() + ') arg count=' + funcArgs.length);
+        console.log('Invoker: ' + functionName + '(' + JSON.stringify(funcArgs) + ') arg count=' + funcArgs.length);
         try {
-            const result = await plugins[functionName](...funcArgs);
-            const stringResult: string = JSON.stringify(result);
+            const stringResult = await plugins[functionName](...funcArgs);
             console.log(`Invoker received result: ${stringResult}`);
             return stringResult;    
         } catch (error) {
