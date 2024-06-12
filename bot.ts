@@ -224,12 +224,14 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
             try {
                 let objectMessage = JSON.parse(stringResponse);
                 if (objectMessage.action && objectMessage.action == 'function-call') {
+                    console.log("Received a function call message from the LLM.");
+
                     // Add the LLM's response to the conversation context
                     conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
                     console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
 
                     // Try to invoke the LLM function, and send the result to the LLM.
-                    const functionResult = await invokeLlmFunction(objectMessage, conversationContext, conversationId);
+                    const functionResult = await invokeLlmFunction(objectMessage, conversationId);
                     console.log(`Saying this to LLM: ${functionResult}`);
                     stringResponse = await queryLLM('user', functionResult, conversationId, true);
                 }
@@ -238,6 +240,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 isFunctionCall = false;
             }
         }
+        console.log('Not a function call..');
 
         stringResponse = stringResponse.replace(/(["$`\\])/g,'\\$1');
 
@@ -262,7 +265,7 @@ function startNewConversationContext(conversationId: string) {
     idToConversationContextMap[conversationId] = { chatMessages };
 }
 
-async function invokeLlmFunction(objectMessage: any, conversationContext: ConversationContext, conversationId: string): Promise<string> {
+async function invokeLlmFunction(objectMessage: any, conversationId: string): Promise<string> {
     // Determine if the function the LLM wants to call is an exposed LLM function.
     const functionName = objectMessage.name;
     let func: string | undefined = undefined;
