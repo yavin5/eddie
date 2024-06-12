@@ -299,7 +299,7 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
             if (Array.isArray(argumentValue) ||
                 argumentStringValue.startsWith('[') &&
                 argumentStringValue.endsWith(']')) {
-                const stringArray: string[] = []
+                const stringArray: string[] = [];
                 funcArgs.push(stringArray);
             } else {
                 if (argumentStringValue.length > 0) {
@@ -309,12 +309,11 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
         }
         console.log('Invoker: ' + functionName + '(' + funcArgs.toString() + ') arg count=' + funcArgs.length);
         try {
-            const result = await plugins.tools.functionName(...funcArgs);
+            const result = await plugins.functionName(...funcArgs);
             console.log(`Invoker received result: ${result}`);
             return result.toString();    
         } catch (error) {
             console.log(`Invoker: ${error}`);
-            return 'Sorry, temporarily I cannot answer this.';
         }
     }
     return ''; // FIXME: throw exception here instead.
