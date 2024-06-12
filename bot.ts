@@ -293,8 +293,8 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
             console.log(`Invoker argumentName: ${argumentName}`);
             const argumentValue = (oArguments as any)[argumentName];
             // FIXME: support non-string argument values!
-            console.log(`Invoker added arg: ${argumentValue}`);
             const argumentStringValue: string = argumentValue.toString();
+            console.log(`Invoker added arg: ${argumentStringValue}`);
             if (argumentStringValue.startsWith('[') &&
                 argumentStringValue.endsWith(']')) {
                 const stringArray: string[] = []
@@ -305,7 +305,7 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
                 }
             }
         }
-        console.log('Invoker: ' + functionName + '(' + funcArgs.toString() + ')');
+        console.log('Invoker: ' + functionName + '(' + funcArgs.toString() + ') arg count=' + funcArgs.length);
         try {
             const result = await plugins.tools.functionName(...funcArgs);
             console.log(`Invoker received result: ${result}`);
