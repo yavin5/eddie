@@ -27,7 +27,10 @@ class WebScrapePlugin {
                 const parts = param.split('=');
                 if (parts.length == 2) {
                     const key = parts[0];
-                    const val = parts[1];
+                    let val = parts[1];
+                    if (key == 'url') {
+                        val = val.replace(/\s/g, '');
+                    }
                     Object.assign(axiosParams, { key: val });
                 }
             }
@@ -42,6 +45,16 @@ class WebScrapePlugin {
             response = `HTTP GET request error: ${error}`;
             console.error(response);
             return response;
+        }
+    }
+
+    async httpPost(url: string, data: Record<string, any>): Promise<any> {
+        try {
+            const response = await axios.post(url, data);
+            return response.data;
+        } catch (error) {
+            console.error('POST request error:', error);
+            throw error;
         }
     }
 }
