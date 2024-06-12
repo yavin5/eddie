@@ -295,7 +295,8 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
             console.log(`Invoker added arg: ${argumentStringValue}`);
             if (argumentStringValue.startsWith('[') &&
                 argumentStringValue.endsWith(']')) {
-                funcArgs.push(new Array<string[]>());
+                const stringArray: string[] = []
+                funcArgs.push(stringArray);
             } else {
                funcArgs.push(argumentStringValue);
             }
