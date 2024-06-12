@@ -265,11 +265,21 @@ function startNewConversationContext(conversationId: string) {
 async function invokeLlmFunction(objectMessage: any, conversationContext: ConversationContext, conversationId: string): Promise<string> {
     // Determine if the function the LLM wants to call is an exposed LLM function.
     const functionName = objectMessage.name;
-    const func = plugins.tools.find((func: any) =>
-        func.function.name === objectMessage.name);
+    let func: string | undefined = undefined;
+    for (let toolFunction of plugins.tools) {
+        if (toolFunction && toolFunction.function) {
+            console.log('Invoker comparing ${toolFunction.function.name} to ${functionName}');
+            if (toolFunction.function.name == functionName) {
+                func = functionName;
+                console.log("Invoker validated ${functionName} !");
+                break;
+            }
+        }
+    }
     // FIXME: addionally validate that the argument list applies.
     // https://stackoverflow.com/questions/51851677/how-to-get-argument-types-from-function-in-typescript
-    if (func) {
+    if (func !== undefined) {
+        console.log('Invoker invoking LLM function.');
         const funcArgs: any[] = [];
         const oArguments = objectMessage.arguments;
         for(let argName of oArguments.getOwnPropertyNames()) {
@@ -278,7 +288,8 @@ async function invokeLlmFunction(objectMessage: any, conversationContext: Conver
             // FIXME: support non-string argument values!
             funcArgs.push(argumentStringValue);
         }
-        const result = await plugins.functionName(...funcArgs);
+        console.log('Invoker: ' + plugins.tools.functionName + '(' + funcArgs.toString() + ')');
+        const result = await plugins.tools.functionName(...funcArgs);
         return result.toString();
     }
     return ''; // FIXME: throw exception here instead.
