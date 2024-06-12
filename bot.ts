@@ -241,6 +241,9 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 stringResponse = stringResponse.replace(/\\\\/g, '');
                 stringResponse = stringResponse.replace(/\\\\/g, '');
                 let objectMessage = JSON.parse(stringResponse);
+                if (objectMessage.action) {
+                    objectMessage.action = objectMessage.action.replace(/\s/g, '');
+                }
                 if (objectMessage.action && objectMessage.action == 'function-call') {
                     console.log("Received a function call message from the LLM.");
 
