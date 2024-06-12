@@ -296,7 +296,7 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
             if (argumentStringValue.startsWith('[') &&
                 argumentStringValue.endsWith(']')) {
                 funcArgs.push(new Array<string[]>());
-            } else 
+            } else {
                funcArgs.push(argumentStringValue);
             }
         }
