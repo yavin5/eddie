@@ -7,6 +7,8 @@ import path from 'path';
 
 dotenv.config();
 
+let plugins: any = undefined;
+
 // Update this path to where signal-cli is installed
 const signalCliPath = process.env.SIGNAL_CLI_PATH!;
 
@@ -24,6 +26,22 @@ const llmModelContextSize: number = +process.env.LLM_MODEL_CONTEXT_SIZE! || 8192
 
 // Bot name will be autodetected from the Signal account and changed
 let botName = 'Bot';
+
+// Build a system message that contains instructions that are specific to how
+// this bot is meant to operate, specifically around function calling.
+const functionCallSystemMessage1 = 'You are a helpful assistant with access to the following functions:\n\n'
+    + 'functions_metadata = ';
+const functionCallSystemMessage2 = '\n\nTo use these functions respond with:\n\n{ \"action\": \"function-call\",'
+    + ' \"name\": \"function_name\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
+    + 'When making function calls, you will have to extract the information requested in the prompt from the '
+    + 'text and generate output in JSON observing the schema provided.\nEdge cases you must handle:\n'
+    + '- If the schema shows a type of integer or number, you must only show a integer for that field. '
+    + 'A string should always be a valid string.\n'
+    + '- If a value is unknown, leave it empty.\n'
+    + '- If there are no functions that could provide missing required data to answer the user request, you will '
+    + 'respond politely that you cannot help.\n'
+    + '- When finally answering the question to the user, do not answer with a JSON message but instead answer '
+    + 'with plain text.';
 
 // Define the structure of a chat message
 interface ChatMessage {
@@ -122,7 +140,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
                     idToConversationContextMap[groupId] = { chatMessages: [] };
                 }
                 console.log(`Saying this to LLM: ` + content);
-                const response = await queryLLM(content, groupId);
+                const response = await queryLLM('user', content, groupId, false);
                 console.log(`Response from LLM : ` + response);
                 sendMessage(groupId, response);
             }
@@ -136,7 +154,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
                 idToConversationContextMap[groupId] = { chatMessages: [] };
             }
             console.log(`Saying this to LLM: ` + content);
-            const response = await queryLLM(content, groupId);
+            const response = await queryLLM('user', content, groupId, false);
             console.log(`Response from LLM : ` + response);
             sendMessage(groupId, response);
         }
@@ -147,23 +165,26 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
                 idToConversationContextMap[senderUuid] = { chatMessages: [] };
             }
             console.log(`Saying this to LLM: ` + content);
-            const response = await queryLLM(content, senderUuid);
+            const response = await queryLLM('user', content, senderUuid, false);
             console.log(`Response from LLM : ` + response);
             sendMessage(sender, response);
         }
     }
 }
 
+/**
+ * Prunes the LLM chat conversation messages so that they fit within the
+ * model's context window size.
+ * @param {ChatMessage[]} messages The message array to prune.
+ * @returns {ChatMessage[]} the pruned array.
+ */
 function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
-    // Function to calculate the total size in bytes of the content strings
-    const calculateTotalSize = (msgs: ChatMessage[]): number => {
-        return msgs.reduce((acc, msg) => acc + new TextEncoder().encode(msg.content).length, 0);
-    };
-
     // Start from the end of the array and add messages until we exceed max size
-    let totalSize = 0;
     const prunedMessages: ChatMessage[] = [];
+    // Keep the system message, which is the first / zeroth message.
+    let totalSize = new TextEncoder().encode(messages[0].content).length
     for (let i = messages.length - 1; i >= 0; i--) {
+        if (i == 0) break;
         const messageSize = new TextEncoder().encode(messages[i].content).length;
         if (totalSize + messageSize <= llmModelContextSize) {
             prunedMessages.unshift(messages[i]);
@@ -177,23 +198,48 @@ function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
 }
 
 // Query the local LLM runtime
-async function queryLLM(message: string, conversationId: string): Promise<string> {
+async function queryLLM(actor: string, message: string, conversationId: string, recurse: boolean): Promise<string> {
     try {
         const model = llmModel;
 
         // Look up the ConversationContext by its conversation ID (sender UUID or group ID).
         const conversationContext = idToConversationContextMap[conversationId];
         if (conversationContext.chatMessages === null) {
+            // Start a new conversation context.
             conversationContext.chatMessages = [];
+            const toolsApi = plugins.tools?.toString() || '';
+            const jsonSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
+            conversationContext.chatMessages.push({role: 'system', content: jsonSystemMessage, images: [] });
         }
 
         // Add the user's message to the conversation context
-        conversationContext.chatMessages.push({ role: 'user', content: message, images: [] });
+        conversationContext.chatMessages.push({ role: actor, content: message, images: [] });
         conversationContext.chatMessages = pruneChatMessages(conversationContext.chatMessages);
 
         const response = await axios.post(llmApiUrl, { model: model, messages: conversationContext.chatMessages, stream: false, keep_alive: "15m" });
-        let stringResponse = response.data.message.content;
+        let stringResponse: string = response.data.message.content;
         console.log(`stringResponse: ${stringResponse}`);
+        if (recurse) return stringResponse;
+        let isFunctionCall = true;
+        while (isFunctionCall) {
+            try {
+                let objectMessage = JSON.parse(stringResponse);
+                if (objectMessage.action && objectMessage.action == 'function-call') {
+                    // Add the LLM's response to the conversation context
+                    conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
+                    console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
+
+                    // Try to invoke the LLM function, and send the result to the LLM.
+                    const functionResult = await invokeLlmFunction(objectMessage, conversationContext, conversationId);
+                    console.log(`Saying this to LLM: ${functionResult}`);
+                    stringResponse = await queryLLM('user', functionResult, conversationId, true);
+                }
+            } catch (e) {
+                // The response was plain text, so we'll give it to the user.
+                isFunctionCall = false;
+            }
+        }
+
         stringResponse = stringResponse.replace(/(["$`\\])/g,'\\$1');
 
         // Add the LLM's response to the conversation context
@@ -208,6 +254,28 @@ async function queryLLM(message: string, conversationId: string): Promise<string
     }
 }
 
+async function invokeLlmFunction(objectMessage: any, conversationContext: ConversationContext, conversationId: string): Promise<string> {
+    // Determine if the function the LLM wants to call is an exposed LLM function.
+    const functionName = objectMessage.name;
+    const func = plugins.tools.find((func: any) =>
+        func.function.name === objectMessage.name);
+    // FIXME: addionally validate that the argument list applies.
+    // https://stackoverflow.com/questions/51851677/how-to-get-argument-types-from-function-in-typescript
+    if (func) {
+        const funcArgs: any[] = [];
+        const oArguments = objectMessage.arguments;
+        for(let argName of oArguments.getOwnPropertyNames()) {
+            const argumentName = argName.toString();
+            const argumentStringValue = oArguments.argumentName;
+            // FIXME: support non-string argument values!
+            funcArgs.push(argumentStringValue);
+        }
+        const result = await plugins.functionName(...funcArgs);
+        return result.toString();
+    }
+    return ''; // FIXME: throw exception here instead.
+}
+
 async function processQueuedMessages(botName: string, receivedArray: Array<any>) {
     // Process queued messages while the receive command isn't running.
     while (receivedArray.length > 0) {
@@ -217,8 +285,8 @@ async function processQueuedMessages(botName: string, receivedArray: Array<any>)
 
 // Start the bot
 async function startBot() {
-    botName = await getBotName();
-    console.log(`Bot name is: ${botName}`);
+    //botName = await getBotName();
+    //console.log(`Bot name is: ${botName}`);
     const myConsole = console;
 
     // Get the directory of the current script file
@@ -226,9 +294,9 @@ async function startBot() {
     let pluginDir = process.env.PLUGIN_DIR || 'plugin';
     // Load the plugins.
     const loader = new PluginLoader(path.join(currentDir, pluginDir));
-    const plugins = await loader.loadPlugins();
+    plugins = await loader.loadPlugins();
     console.log('Plugin loader loaded LLM functions:');
-    console.log(JSON.stringify(plugins.tools));
+    console.log(`tools = ` + JSON.stringify(plugins.tools));
 
     // A queue of messages received from Signal that need processing.
     let receivedArray: Array<any> = [];
