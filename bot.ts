@@ -271,10 +271,10 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
     let func: string | undefined = undefined;
     for (let toolFunction of plugins.tools) {
         if (toolFunction && toolFunction.function) {
-            console.log('Invoker comparing ${toolFunction.function.name} to ${functionName}');
+            console.log(`Invoker comparing ${toolFunction.function.name} to ${functionName}`);
             if (toolFunction.function.name == functionName) {
                 func = functionName;
-                console.log("Invoker validated ${functionName} !");
+                console.log(`Invoker validated ${functionName} !`);
                 break;
             }
         }
@@ -284,10 +284,10 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
     if (func !== undefined) {
         console.log('Invoker invoking LLM function.');
         const funcArgs: any[] = [];
-        const oArguments = objectMessage.arguments;
-        for(let argName of oArguments.getOwnPropertyNames()) {
+        const oArguments: object = objectMessage.arguments;
+        for(let argName of Object.getOwnPropertyNames(oArguments)) {
             const argumentName = argName.toString();
-            const argumentStringValue = oArguments.argumentName;
+            const argumentStringValue = (oArguments as any).argumentName;
             // FIXME: support non-string argument values!
             funcArgs.push(argumentStringValue);
         }
