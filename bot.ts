@@ -288,13 +288,14 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
         for(let argName of Object.getOwnPropertyNames(oArguments)) {
             const argumentName = argName.toString();
             console.log(`Invoker argumentName: ${argumentName}`);
-            const argumentStringValue = (oArguments as any).argumentName;
+            const argumentStringValue = (oArguments as any)[argumentName];
             // FIXME: support non-string argument values!
             console.log(`Invoker added arg: ${argumentStringValue}`);
             funcArgs.push(argumentStringValue);
         }
         console.log('Invoker: ' + functionName + '(' + funcArgs.toString() + ')');
-        const result = await plugins.tools.functionName(...funcArgs);
+        const result = await plugins.tools[functionName](...funcArgs);
+        console.log(`Invoker received result: ${result}`);
         return result.toString();
     }
     return ''; // FIXME: throw exception here instead.
