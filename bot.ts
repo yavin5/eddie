@@ -291,15 +291,18 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
         for(let argName of Object.getOwnPropertyNames(oArguments)) {
             const argumentName = argName.toString();
             console.log(`Invoker argumentName: ${argumentName}`);
-            const argumentStringValue = (oArguments as any)[argumentName];
+            const argumentValue = (oArguments as any)[argumentName];
             // FIXME: support non-string argument values!
-            console.log(`Invoker added arg: ${argumentStringValue}`);
-            if (argumentStringValue.startsWith('[') &&
-                argumentStringValue.endsWith(']')) {
+            console.log(`Invoker added arg: ${argumentValue}`);
+            if (argumentValue.startsWith('[') &&
+                argumentValue.endsWith(']')) {
                 const stringArray: string[] = []
                 funcArgs.push(stringArray);
-            } else if (argumentStringValue && argumentStringValue.length > 0) {
-               funcArgs.push(argumentStringValue);
+            } else {
+                const argumentStringValue: string = argumentValue.toString();
+                if (argumentStringValue.length > 0) {
+                    funcArgs.push(argumentStringValue);
+                }
             }
         }
         console.log('Invoker: ' + functionName + '(' + funcArgs.toString() + ')');
