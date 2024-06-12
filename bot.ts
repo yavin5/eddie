@@ -207,6 +207,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         if (!conversationContext || conversationContext.chatMessages === null) {
             startNewConversationContext(conversationId);
             conversationContext = idToConversationContextMap[conversationId];
+            console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');            
         }
 
         // Add the user's message to the conversation context
@@ -255,7 +256,7 @@ function startNewConversationContext(conversationId: string) {
     let chatMessages = [];
     const toolsApi = plugins.tools?.toString() || '';
     const jsonSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
-    //console.log(jsonSystemMessage);
+    console.log(jsonSystemMessage);
     chatMessages.push({ role: 'system', content: jsonSystemMessage, images: [] });
     idToConversationContextMap[conversationId] = { chatMessages };
 }
