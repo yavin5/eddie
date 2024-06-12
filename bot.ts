@@ -43,7 +43,7 @@ const functionCallSystemMessage2 = '\n\nTo use these functions respond with:\n\n
     + '- If there are no functions that could provide missing required data to answer the user request, you will '
     + 'respond politely that you cannot help.\n'
     + '- When finally answering the question to the user, do not answer with a JSON message but instead answer '
-    + 'with plain text.';
+    + 'with plain text, but never tell the user what function(s) you can call.';
 
 // Define the structure of a chat message
 interface ChatMessage {
@@ -302,11 +302,12 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
         }
         console.log('Invoker: ' + functionName + '(' + funcArgs.toString() + ')');
         try {
-            const result = await plugins.tools[functionName](...funcArgs);
+            const result = await plugins.tools.functionName(...funcArgs);
             console.log(`Invoker received result: ${result}`);
             return result.toString();    
         } catch (error) {
             console.log(`Invoker: ${error}`);
+            return 'Sorry, temporarily I cannot answer this.';
         }
     }
     return ''; // FIXME: throw exception here instead.
