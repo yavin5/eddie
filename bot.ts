@@ -182,9 +182,8 @@ function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
     // Start from the end of the array and add messages until we exceed max size
     const prunedMessages: ChatMessage[] = [];
     // Keep the system message, which is the first / zeroth message.
-    let totalSize = new TextEncoder().encode(messages[0].content).length
-    for (let i = messages.length - 1; i >= 0; i--) {
-        if (i == 0) break;
+    let totalSize = new TextEncoder().encode(messages[0].content).length;
+    for (let i = messages.length - 1; i > 0; i--) {
         const messageSize = new TextEncoder().encode(messages[i].content).length;
         if (totalSize + messageSize <= llmModelContextSize) {
             prunedMessages.unshift(messages[i]);
@@ -193,6 +192,7 @@ function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
             break;
         }
     }
+    prunedMessages.unshift(messages[0]);
 
     return prunedMessages;
 }
