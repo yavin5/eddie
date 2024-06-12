@@ -292,6 +292,7 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
             const argumentName = argName.toString();
             console.log(`Invoker argumentName: ${argumentName}`);
             const argumentValue = (oArguments as any)[argumentName];
+            console.log(`Invoker arg type: ` + typeof argumentValue);
             // FIXME: support non-string argument values!
             const argumentStringValue: string = argumentValue.toString();
             console.log(`Invoker added arg: ${argumentStringValue}`);
