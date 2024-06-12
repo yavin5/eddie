@@ -29,22 +29,34 @@ let botName = 'Bot';
 
 // Build a system message that contains instructions that are specific to how
 // this bot is meant to operate, specifically around function calling.
-const functionCallSystemMessage1 = 'You are a helpful assistant with access to real-time data using the following'
-    + 'functions:\n\n'
+const functionCallSystemMessage1 = 'You are a helpful assistant with access to real-time data using '
+    + 'the following functions:\n\n'
     + 'functions_metadata = ';
-const functionCallSystemMessage2 = '\n\nTo use these functions respond with:\n\n{ \"action\": \"function-call\",'
-    + ' \"name\": \"function_name\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
-    + 'When making function calls, you will have to extract the information requested in the prompt from the '
-    + 'text and generate output only in JSON format, observing and conforming to the schema provided.'
-    + '\nEdge cases you must handle:\n'
-    + '- You must not include any text in your response that is not part of the JSON format response.'
-    + '- If the schema shows a type of integer or number, you must only show a integer for that field. '
-    + 'A string should always be a valid string.\n'
+const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONLY in JSON format with:\n\n'
+    + '{ \"action\": \"function-call\", \"name\": \"function_name\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
+    + 'You only need to call a function when you cannot answer the question from the user because you do\n'
+    + 'not have all of the required data, or the user is requesting today\'s live data.\n'
+    + 'When making a function call, output only in JSON format, observing and conforming to the schema provided.\n'
+    + 'Use the function-response content to help generate a plain text response for the user and send only the\n'
+    + 'plain text response to the user after the function-response.  Never send JSON text after the function-response.\n'
+    + 'You are allowed to provide up-to-date information from web pages, and you can browse the web to find info.\n'
+    + 'You are able to perform tasks in real time that the user wants you to perform.\n\n'
+    + 'Edge cases you must handle only when sending a function-call message:\n'
+    + '- Never include any text in your function call that is not part of the JSON format response.\n'
+    + '- Your function-call JSON response cannot be backslash escaped.\n'
+    + '- If the schema shows a type of integer or number, you must only show a integer for that field.'
+    + '  A string should always be a valid string.\n'
     + '- If a value is unknown, leave it empty.\n'
+    + '- Ensure you use the field names from the JSON schema.  Do not change any field names, nor create additional field names.\n'
+    + '- Do not add fields that arent shown in the JSON schema.\n\n'
+    + 'Edge cases you must handle when sending a regular text response that is not a function-call message:\n\n'
+    + '- Never tell the user how you will call functions. Instead just call the function.\n'
+    + '- Do not explain how you plan to perform the task of gathering real time data via a function\n'
+    + '  call.  Just send the function-call JSON message without explaining anything, and gather info from the function-response.\n'
     + '- If there are no functions that could provide missing required data to answer the user request, you will '
     + 'respond politely that you cannot help.\n'
-    + '- When finally answering the question to the user, do not answer with a JSON message but instead answer '
-    + 'with plain text, but never tell the user what function(s) you can call.';
+    + '- When answering the user\'s question, never tell the user what function(s) you can call.\n'
+    + '- Never tell the user that you\'re not allowed to say something.'
 
 // Define the structure of a chat message
 interface ChatMessage {
@@ -113,7 +125,14 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
     const groupId = dataMessage.groupInfo?.groupId || '';
     const content = dataMessage.message || '';
 
+    console.log('handleMessage');
+    console.log(`sender: ${sender}`);
+    console.log(`groupInfo: ${groupInfo}`);
+    console.log(`groupId: ${groupId}`);
+    //console.log(`content: ${content}`);
+
     if (administrators.has(sender)) {
+        // FIXME: Accomodate messages that start with @BotName | BotName | ' '
         if (content.startsWith('/admin ')) {
             const newAdmin = content.split(' ')[1];
             // TODO: look up and use the user's account ID.
@@ -139,9 +158,6 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
                 mention.number === botPhoneNumber ||
                 mention.uuid === botPhoneNumber);
             if (mention) {
-                if (!idToConversationContextMap[groupId]) {
-                    startNewConversationContext(senderUuid);
-                }
                 console.log(`Saying this to LLM: ` + content);
                 const response = await queryLLM('user', content, groupId, false);
                 console.log(`Response from LLM : ` + response);
@@ -149,13 +165,12 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
             }
         }
 
+        // FIXME: should say else right here.
+
         // Check to see if the bot's name is on the front of the message,
         // or @BotName (a plain text mention) is in the message somewhere.
         if (content.toLowerCase().startsWith(botName.toLowerCase()) ||
             content.toLowerCase().includes('@' + botName.toLowerCase())) {
-            if (!idToConversationContextMap[groupId]) {
-                startNewConversationContext(senderUuid);
-            }
             console.log(`Saying this to LLM: ` + content);
             const response = await queryLLM('user', content, groupId, false);
             console.log(`Response from LLM : ` + response);
@@ -164,9 +179,6 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
     } else {
         // NOT a group message.
         if (!ignoredUsers.has(sender) && !ignoredUsers.has(senderUuid)) {
-            if (!idToConversationContextMap[senderUuid]) {
-                startNewConversationContext(senderUuid);
-            }
             console.log(`Saying this to LLM: ` + content);
             const response = await queryLLM('user', content, senderUuid, false);
             console.log(`Response from LLM : ` + response);
@@ -225,6 +237,9 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         let isFunctionCall = true;
         while (isFunctionCall) {
             try {
+                stringResponse = stringResponse.replace(/Here is the function call:/g, '');
+                stringResponse = stringResponse.replace(/\\\\/g, '');
+                stringResponse = stringResponse.replace(/\\\\/g, '');
                 let objectMessage = JSON.parse(stringResponse);
                 if (objectMessage.action && objectMessage.action == 'function-call') {
                     console.log("Received a function call message from the LLM.");
@@ -260,12 +275,12 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 }
 
 function startNewConversationContext(conversationId: string) {
-    let chatMessages = [];
+    let chatMessages: ChatMessage[] = [];
     const toolsApi = JSON.stringify(plugins.tools);
     const jsonSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
     console.log(jsonSystemMessage);
     chatMessages.push({ role: 'system', content: jsonSystemMessage, images: [] });
-    idToConversationContextMap[conversationId] = { chatMessages };
+    idToConversationContextMap[conversationId] = ({ chatMessages } as ConversationContext);
 }
 
 async function invokeLlmFunction(objectMessage: any, conversationId: string): Promise<string> {
@@ -329,8 +344,8 @@ async function processQueuedMessages(botName: string, receivedArray: Array<any>)
 
 // Start the bot
 async function startBot() {
-    //botName = await getBotName();
-    //console.log(`Bot name is: ${botName}`);
+    botName = await getBotName();
+    console.log(`Bot name is: ${botName}`);
     const myConsole = console;
 
     // Get the directory of the current script file
@@ -360,7 +375,7 @@ async function startBot() {
                 // process to finish reading received lines and only then begin processing.
                 await new Promise((r) => setTimeout(r, 1000)); // 1 second
 
-                processQueuedMessages(botName, receivedArray);
+                await processQueuedMessages(botName, receivedArray);
             }
         });
 
