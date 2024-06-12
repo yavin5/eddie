@@ -203,9 +203,10 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         const model = llmModel;
 
         // Look up the ConversationContext by its conversation ID (sender UUID or group ID).
-        const conversationContext = idToConversationContextMap[conversationId];
+        let conversationContext = idToConversationContextMap[conversationId];
         if (!conversationContext || conversationContext.chatMessages === null) {
             startNewConversationContext(conversationId);
+            conversationContext = idToConversationContextMap[conversationId];
         }
 
         // Add the user's message to the conversation context
