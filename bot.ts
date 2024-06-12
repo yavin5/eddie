@@ -213,6 +213,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         // Add the user's message to the conversation context
         conversationContext.chatMessages.push({ role: actor, content: message, images: [] });
         conversationContext.chatMessages = pruneChatMessages(conversationContext.chatMessages);
+        console.log('Context now has (after prune) ' + conversationContext.chatMessages.length + ' messsages.');
 
         const response = await axios.post(llmApiUrl, { model: model, messages: conversationContext.chatMessages, stream: false, keep_alive: "15m" });
         let stringResponse: string = response.data.message.content;
@@ -254,7 +255,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
 function startNewConversationContext(conversationId: string) {
     let chatMessages = [];
-    const toolsApi = plugins.tools?.toString() || '';
+    const toolsApi = JSON.stringify(plugins.tools);
     const jsonSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
     console.log(jsonSystemMessage);
     chatMessages.push({ role: 'system', content: jsonSystemMessage, images: [] });
