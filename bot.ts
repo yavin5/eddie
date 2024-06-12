@@ -29,7 +29,8 @@ let botName = 'Bot';
 
 // Build a system message that contains instructions that are specific to how
 // this bot is meant to operate, specifically around function calling.
-const functionCallSystemMessage1 = 'You are a helpful assistant with access to the following functions:\n\n'
+const functionCallSystemMessage1 = 'You are a helpful assistant with access to real-time data using the following'
+    + 'functions:\n\n'
     + 'functions_metadata = ';
 const functionCallSystemMessage2 = '\n\nTo use these functions respond with:\n\n{ \"action\": \"function-call\",'
     + ' \"name\": \"function_name\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
@@ -297,7 +298,7 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
                 argumentStringValue.endsWith(']')) {
                 const stringArray: string[] = []
                 funcArgs.push(stringArray);
-            } else {
+            } else if (argumentStringValue && argumentStringValue.length > 0) {
                funcArgs.push(argumentStringValue);
             }
         }
