@@ -28,16 +28,37 @@ class WebScrapePlugin {
                 if (parts.length == 2) {
                     const key = parts[0];
                     let val = parts[1];
-                    if (key == 'url') {
-                        val = val.replace(/\s/g, '');
-                    }
                     Object.assign(axiosParams, { key: val });
                 }
             }
         }
+        let url2 = url.replace(/\s+/g, '');
+        if (url2.includes('example.com') || url2.includes('example2.com')) {
+            return 'The domain example.com is not a real web site. Try a differ\
+ent site.';
+        }
+        if (!url2.startsWith('http')) {
+            url2 = `http://${url2}`;
+        }
+        if (url2.includes('wikipedia.org')) {
+            // Switch to the plain text way to search wikipedia.
+            let query: string | null = '';
+            if (url.includes('&titles=')) {
+                const matches = url.match(/[^&titles=](.*)[^&]/g);
+                if (matches) {
+                    query = matches[0];
+                } else if (params) {
+                    if (params.indexOf('query')) query = params[params.indexOf('query')];
+                    if (params.indexOf('q')) query = params[params.indexOf('q')];
+                    if (params.indexOf('titles')) query = params[params.indexOf('titles')];
+                }
+            }
+            url2 = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=&explaintext=&exlimit=10&titles=w:${query}`;
+        }
+
         let response;
         try {
-            response = await axios.get(url, { params: axiosParams });
+            response = await axios.get(url2, { params: axiosParams });
             await new Promise<void>(resolve => setTimeout(() => resolve(), 1000))
                 .then(() => console.log("WebScrapePlugin: httpGet."));
             return response.data;
