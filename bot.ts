@@ -239,14 +239,17 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         console.log(`stringResponse: ${stringResponse}`);
         if (recurse) return stringResponse;
         let isFunctionCall = true;
-        while (isFunctionCall) {
+        let functionCallCounter = 0;
+        while (isFunctionCall && functionCallCounter <= 10) {
+            functionCallCounter = functionCallCounter++;
             try {
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 let matches: RegExpMatchArray | null;
-                if (matches = stringResponse.match(/\s*[{]\s*[\]*["][\s]*action[\s]*[\]*["]:/gm)) {
+                if (matches = stringResponse.match(/^ *[{]\s*[\]*["][\s]*action[\s]*[\]*["]:/gm)) {
                     // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
                     stringResponse = JSON.stringify(parse(matches[0]));
+                    console.log('sanitized JSON: ' + stringResponse);
                 }
                 let objectMessage = JSON.parse(stringResponse);
                 if (objectMessage.action) {
