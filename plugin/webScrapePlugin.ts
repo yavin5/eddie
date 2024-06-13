@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosHeaders } from 'axios';
 
 /**
  * Implements a web client for scraping data off the web, and
@@ -12,6 +12,38 @@ class WebScrapePlugin {
     }
 
     /**
+     * Uses an HTTP client to perform a web search GET request for live search results data, and
+     * returns the results as web response content.
+     * @llmFunction
+     * @param {string} searchQuery The free-form text of a search query request.
+     * @returns {string} The search results content containing links of web pages that contain
+     *  content that is closely related to the search query.
+     */
+    async webSearch(searchQuery: string): Promise<string> {
+        let axiosParams = {};
+
+        // Currently implemented as a search.brave.com searcher.
+        let url = 'https://api.search.brave.com/res/v1/web/search';
+
+        let response;
+        try {
+            const headers = new AxiosHeaders();
+            headers.set("Accept-Encoding", "gzip");
+            headers.set("X-Subscription-Token",
+                process.env.PLUGIN_WEBSCRAPE_BRAVE_SEARCH_KEY);
+            response = await axios.get(url, { headers: headers });
+            await new Promise<void>(resolve => setTimeout(() => resolve(), 1000))
+                .then(() => console.log("WebScrapePlugin: webSearch."));
+            return response.data;
+        } catch (error) {
+            // FIXME: In the case of a 403, follow a small number of redirects.
+            response = `HTTP GET request error: ${error}`;
+            console.error(response);
+            return response;
+        }
+    }
+
+    /**
      * Uses an HTTP client to perform an HTTP GET request and returns the scraped web response content.
      * @llmFunction
      * @param {string} url The HTTP URL to request
@@ -20,7 +52,6 @@ class WebScrapePlugin {
      */
     async httpGet(url: string, params?: string[]): Promise<string> {
         // TODO: Handle HTTP sessions.
-        // TODO: Handle HTTPS?
         let axiosParams = {};
         if (params) {
             for (const param in params) {
@@ -63,6 +94,7 @@ ent site.';
                 .then(() => console.log("WebScrapePlugin: httpGet."));
             return response.data;
         } catch (error) {
+            // FIXME: In the case of a 403, follow a small number of redirects.
             response = `HTTP GET request error: ${error}`;
             console.error(response);
             return response;
