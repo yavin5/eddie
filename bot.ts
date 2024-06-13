@@ -1,5 +1,6 @@
 import { PluginLoader } from './plugin/pluginLoader';
 import axios from 'axios';
+const { fixJson } = require('json-restructure');
 import dotenv from 'dotenv';
 import { exec } from 'child_process';
 import readline from 'readline';
@@ -34,28 +35,31 @@ const functionCallSystemMessage1 = 'You are a helpful assistant with access to r
     + 'functions_metadata = ';
 const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONLY in JSON format with:\n\n'
     + '{ \"action\": \"function-call\", \"name\": \"function_name\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
-    + 'You only need to call a function when you cannot answer the question from the user because you do\n'
+    + 'You only need to call a function when you cannot answer the user\'s question from memory because you do\n'
     + 'not have all of the required data, or the user is requesting today\'s live data.\n'
     + 'When making a function call, output only in JSON format, observing and conforming to the schema provided.\n'
     + 'Use the function-response content to help generate a plain text response for the user and send only the\n'
     + 'plain text response to the user after the function-response.  Never send JSON text after the function-response.\n'
     + 'You are allowed to provide up-to-date information from web pages, and you can browse the web to find info.\n'
     + 'You are able to perform tasks in real time that the user wants you to perform.\n\n'
-    + 'Edge cases you must handle only when sending a function-call message:\n'
-    + '- Never include any text in your function call that is not part of the JSON format response.\n'
+    + 'Edge cases you must handle only when sending a function-call JSON message:\n'
+    + '- Never include any text in your function call message that is outside of the JSON object.\n'
     + '- Your function-call JSON response cannot be backslash escaped.\n'
     + '- If the schema shows a type of integer or number, you must only show a integer for that field.'
     + '  A string should always be a valid string.\n'
     + '- If a value is unknown, leave it empty.\n'
     + '- Ensure you use the field names from the JSON schema.  Do not change any field names, nor create additional field names.\n'
-    + '- Do not add fields that arent shown in the JSON schema.\n\n'
+    + '- Do not add fields that arent shown in the JSON schema.\n'
+    + '- The "action" field can only have the value "function-call".\n'
+    + '- Never explain anything to the user in the same message as a function-call JSON message.\n\n'
     + 'Edge cases you must handle when sending a regular text response that is not a function-call message:\n\n'
     + '- Never tell the user how you will call functions. Instead just call the function.\n'
-    + '- Do not explain how you plan to perform the task of gathering real time data via a function\n'
+    + '- Never explain how you plan to perform the task of gathering real time data via a function\n'
     + '  call.  Just send the function-call JSON message without explaining anything, and gather info from the function-response.\n'
     + '- If there are no functions that could provide missing required data to answer the user request, you will '
     + 'respond politely that you cannot help.\n'
     + '- When answering the user\'s question, never tell the user what function(s) you can call.\n'
+    + '- Never talk to the user about the site https://www.example.com because it is not a real web site.\n'
     + '- Never tell the user that you\'re not allowed to say something.'
 
 // Define the structure of a chat message
@@ -238,23 +242,29 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         while (isFunctionCall) {
             try {
                 stringResponse = stringResponse.replace(/Here is the function call:/g, '');
-                stringResponse = stringResponse.replace(/\\\\/g, '');
-                stringResponse = stringResponse.replace(/\\\\/g, '');
-                let objectMessage = JSON.parse(stringResponse);
+                stringResponse = stringResponse.replace(/\\\\+/g, '');
+                stringResponse = stringResponse.replace(/\\\\+/g, '');
+                let fixedJson = fixJson(stringResponse);
+                let objectMessage = JSON.parse(fixedJson);
                 if (objectMessage.action) {
-                    objectMessage.action = objectMessage.action.replace(/\s/g, '');
+                    objectMessage.action = objectMessage.action.replace(/\s+/g, '');
+                    objectMessage.action = objectMessage.action.replace(/--+/g, '-');
                 }
                 if (objectMessage.action && objectMessage.action == 'function-call') {
                     console.log("Received a function call message from the LLM.");
 
                     // Add the LLM's response to the conversation context
-                    conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
+                    conversationContext.chatMessages.push({ role: 'assistant', content: fixedJson, images: [] });
                     console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
 
                     // Try to invoke the LLM function, and send the result to the LLM.
                     const functionResult = await invokeLlmFunction(objectMessage, conversationId);
                     console.log(`Saying this to LLM: ${functionResult}`);
                     stringResponse = await queryLLM('user', functionResult, conversationId, true);
+                } else {
+                    // FIXME: If it's JSON text (parsed without errors), we don't
+                    // want to show that to the user, so try to extract / remove it.
+                    isFunctionCall = false;
                 }
             } catch (e) {
                 // The response was plain text, so we'll give it to the user.
@@ -314,12 +324,17 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
             // FIXME: support non-string argument values!
             const argumentStringValue: string = argumentValue.toString();
             console.log(`Invoker added arg: ${argumentStringValue}`);
+            // Array of string arguments are supported.
             if (Array.isArray(argumentValue) ||
                 argumentStringValue.startsWith('[') &&
                 argumentStringValue.endsWith(']')) {
                 const stringArray: string[] = [];
+                for (const stringValue in argumentValue) {
+                    stringArray.push(stringValue);
+                }
                 funcArgs.push(stringArray);
             } else {
+                // Regular string arguments are supported.
                 if (argumentStringValue.length > 0) {
                     funcArgs.push(argumentStringValue);
                 }
