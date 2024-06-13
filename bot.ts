@@ -258,7 +258,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     console.log("Received a function call message from the LLM.");
 
                     // Add the LLM's response to the conversation context
-                    conversationContext.chatMessages.push({ role: 'assistant', content: fixedJson, images: [] });
+                    conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
                     console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
 
                     // Try to invoke the LLM function, and send the result to the LLM.
