@@ -243,9 +243,10 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
             try {
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
-                if (stringResponse.match(/\s*[{]\s*[\]*["][\s]*action[\s]*[\]*["]:/gm)) {
+                let matches: RegExpMatchArray | null;
+                if (matches = stringResponse.match(/\s*[{]\s*[\]*["][\s]*action[\s]*[\]*["]:/gm)) {
                     // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
-                    stringResponse = JSON.stringify(parse(stringResponse));
+                    stringResponse = JSON.stringify(parse(matches[0]));
                 }
                 let objectMessage = JSON.parse(stringResponse);
                 if (objectMessage.action) {
