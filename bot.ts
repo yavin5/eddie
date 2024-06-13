@@ -1,6 +1,6 @@
 import { PluginLoader } from './plugin/pluginLoader';
 import axios from 'axios';
-const { fixJson } = require('json-restructure');
+import { parse } from 'best-effort-json-parser';
 import dotenv from 'dotenv';
 import { exec } from 'child_process';
 import readline from 'readline';
@@ -241,16 +241,20 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         let isFunctionCall = true;
         while (isFunctionCall) {
             try {
-                stringResponse = stringResponse.replace(/Here is the function call:/g, '');
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
-                let fixedJson = fixJson(stringResponse);
-                let objectMessage = JSON.parse(fixedJson);
+                if (stringResponse.match(/\s*[{]\s*[\]*["][\s]*action[\s]*[\]*["]:/gm)) {
+                    // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
+                    stringResponse = JSON.stringify(parse(stringResponse));
+                }
+                let objectMessage = JSON.parse(stringResponse);
                 if (objectMessage.action) {
                     objectMessage.action = objectMessage.action.replace(/\s+/g, '');
                     objectMessage.action = objectMessage.action.replace(/--+/g, '-');
                 }
-                if (objectMessage.action && objectMessage.action == 'function-call') {
+                // If it says action=literally anything, and otherwise the JSON
+                // works as a function-call, just take it and invoke LLM func.
+                if (objectMessage.action && objectMessage.action && objectMessage.name && objectMessage.arguments) {
                     console.log("Received a function call message from the LLM.");
 
                     // Add the LLM's response to the conversation context

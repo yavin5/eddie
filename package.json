@@ -13,6 +13,7 @@
   "dependencies": {
     "@types/node": "^20.14.2",
     "axios": "^1.7.2",
+    "best-effort-json-parser": "^1.1.2",
     "child_process": "^1.0.2",
     "dotenv": "^16.4.5",
     "openai-node": "^1.0.5",
