@@ -1,4 +1,5 @@
 import axios, { AxiosHeaders } from 'axios';
+const { convert } = require('html-to-text');
 
 /**
  * Implements a web client for scraping data off the web, and
@@ -37,7 +38,7 @@ class WebScrapePlugin {
             response = await axios.get(url, { headers: headers });
             await new Promise<void>(resolve => setTimeout(() => resolve(), 1000))
                 .then(() => console.log("WebScrapePlugin: webSearch."));
-            return response.data;
+            return this.scrapeHtmlText(response.data);
         } catch (error) {
             // FIXME: In the case of a 403, follow a small number of redirects.
             response = `HTTP GET request error: ${error}`;
@@ -112,6 +113,20 @@ ent site.';
             console.error('POST request error:', error);
             throw error;
         }
+    }
+
+    /**
+     * Convert thick HTML into smaller readable plain text.
+     * @param {string} htmlText 
+     * @returns {string} the plain text representation of the HTML.
+     */
+    scrapeHtmlText(htmlText: string): string {
+        const options = {
+            wordwrap: 130,
+            // ...
+        };
+        let plainText = convert(htmlText, options);
+        return plainText;
     }
 }
 
