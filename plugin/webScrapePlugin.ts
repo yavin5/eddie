@@ -1,5 +1,5 @@
 import axios, { AxiosHeaders } from 'axios';
-const { convert } = require('html-to-text');
+const { compile } = require('html-to-text');
 
 /**
  * Implements a web client for scraping data off the web, and
@@ -125,8 +125,12 @@ ent site.';
             wordwrap: 130,
             // ...
         };
-        let plainText = convert(htmlText, options);
-        return plainText;
+        let compiledConvert = compile(options);
+        let arr = htmlText.split(/\r?\n/);
+        let plainTextArr = arr.map(compiledConvert);
+        const separator = '\n';
+        const result: string = plainTextArr.join(separator);
+        return result;
     }
 }
 
