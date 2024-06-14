@@ -34,7 +34,7 @@ const functionCallSystemMessage1 = 'You are a helpful assistant with access to r
     + 'the following functions:\n\n'
     + 'functions_metadata = ';
 const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONLY in JSON format with:\n\n'
-    + '{ \"action\": \"function-call\", \"name\": \"function_name\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
+    + '{ \"action\": \"function-call\", \"name\": \"functionName\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
     + 'You only need to call a function when you cannot answer the user\'s question from memory because you do\n'
     + 'not have all of the required data, or the user is requesting today\'s live data.\n'
     + 'When making a function call, output only in JSON format, observing and conforming to the schema provided.\n'
@@ -256,6 +256,8 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     objectMessage.action = objectMessage.action.replace(/\s+/g, '');
                     objectMessage.action = objectMessage.action.replace(/--+/g, '-');
                 }
+                if (objectMessage['function_name']) objectMessage['name'] = objectMessage['function_name'];
+                if (objectMessage['parameters']) objectMessage['arguments'] = objectMessage['parameters'];
                 // If it says action=literally anything, and otherwise the JSON
                 // works as a function-call, just take it and invoke LLM func.
                 if (objectMessage.action && objectMessage.action && objectMessage.name && objectMessage.arguments) {
