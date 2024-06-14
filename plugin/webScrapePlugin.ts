@@ -28,9 +28,12 @@ class WebScrapePlugin {
         let response;
         try {
             const headers = new AxiosHeaders();
-            headers.set("Accept-Encoding", "gzip");
-            headers.set("X-Subscription-Token",
+            headers.set('User-Agent', 'LLM');
+            headers.set('Accept', 'application/json');
+            headers.set('Accept-Encoding', 'gzip');
+            headers.set('X-Subscription-Token',
                 process.env.PLUGIN_WEBSCRAPE_BRAVE_SEARCH_KEY);
+            console.log(JSON.stringify(headers));
             response = await axios.get(url, { headers: headers });
             await new Promise<void>(resolve => setTimeout(() => resolve(), 1000))
                 .then(() => console.log("WebScrapePlugin: webSearch."));
