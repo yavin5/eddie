@@ -23,7 +23,7 @@ class WebScrapePlugin {
         let axiosParams = {};
 
         // Currently implemented as a search.brave.com searcher.
-        let url = 'https://api.search.brave.com/res/v1/web/search';
+        let url = 'https://api.search.brave.com/res/v1/web/search?q=' + searchQuery;
 
         let response;
         try {
