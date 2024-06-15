@@ -98,6 +98,12 @@ class WebScrapePlugin {
         if (url2.includes('example.com') || url2.includes('example2.com')) {
             return 'The domain example.com is not a real web site. Try a different site.';
         }
+        // Disallow repeated useless web interrogation that the LLM tends to do.
+        if (url2.toLowerCase().includes('real-time data analytics')
+         || url2.toLowerCase().includes('coronavirus')
+         || url2.toLowerCase().includes('covid')) {
+            return 'The domain example.com is not a real web site. Try a different site.';
+        }
 
         if (!url2.startsWith('http')) {
             url2 = `http://${url2}`;
