@@ -24,6 +24,13 @@ class WebScrapePlugin {
      */
     async webSearch(searchQuery: string): Promise<string> {
 
+        // The LLM likes to search for these useless search queries.
+        if (searchQuery.toLowerCase() == 'real-time data analytics'
+         || searchQuery.toLowerCase() == 'coronavirus latest news'
+         || searchQuery.toLowerCase() == 'live search data') {
+            return 'Error. Search query incorrect.  Please answer that you don\'t know.';
+        }
+
         // Currently implemented as a search.brave.com searcher.
         // count = 3 : This is supposed to return 3 results. We need small output to LLM!
         // text_decorations = 0 : We don't want a highlighted colored text response.
@@ -80,10 +87,10 @@ class WebScrapePlugin {
     async httpGet(url: string, params?: string[]): Promise<string> {
         // TODO: Handle HTTP sessions (some sites break if no cookies are returned)
         const requestHeaders: HeadersInit = new Headers();
-        requestHeaders.set('Accept', 'application/json');
+        //requestHeaders.set('Accept', 'application/json');
 
         // Sometimes the LLM is sending URLs that contain spaces.  :(
-        let url2 = url.replace(/\s+/g, '');
+        let url2 = url.replace(/\S+/g, '');
 
         // Don't bother making requests to example.com.
         if (url2.includes('example.com') || url2.includes('example2.com')) {
@@ -114,7 +121,7 @@ class WebScrapePlugin {
             await fetch(url, {
                 method: 'GET',
                 headers: requestHeaders
-            }).then(response => response.json())
+            }).then(response => response.text())
               .then(data => { jsonText = data; })
               .catch(error => console.error(error));
 
