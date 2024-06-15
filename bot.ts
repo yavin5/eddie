@@ -269,8 +269,14 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
                     // Try to invoke the LLM function, and send the result to the LLM.
                     const functionResult = await invokeLlmFunction(objectMessage, conversationId);
-                    console.log(`Saying this to LLM: ${functionResult}`);
-                    stringResponse = await queryLLM('user', functionResult, conversationId, true);
+
+                    // Wrap the result in a function-response JSON messsage to send back to the LLM.
+                    const functionResultJson = JSON.stringify(functionResult);
+                    let functionResponseJson: string = `{"role":"user","content":"{\"from\": \"function-response\", `
+                        + `\"value\": \"{\"status\": \"ok\", \"message\": \"${functionResultJson}\"}\" }"}`;
+
+                    //console.log(`Saying this to LLM: ${functionResponseJson}`); // only part of this string gets sent!
+                    stringResponse = await queryLLM('user', functionResponseJson, conversationId, true);
                 } else {
                     // FIXME: If it's JSON text (parsed without errors), we don't
                     // want to show that to the user, so try to extract / remove it.
@@ -352,10 +358,10 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
         }
         console.log('Invoker: ' + functionName + '(' + JSON.stringify(funcArgs) + ') arg count=' + funcArgs.length);
         try {
+            // INVOKE the LLM function!
             const stringResult = await plugins[functionName](...funcArgs);
-            const jsonFriendlyResult: string = JSON.stringify(stringResult);
-            console.log(`Invoker received result: ${jsonFriendlyResult}`);
-            return jsonFriendlyResult;
+            console.log(`Invoker received result: ${stringResult}`);
+            return stringResult;
         } catch (error) {
             console.log(`Invoker: ${error}`);
         }
