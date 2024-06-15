@@ -27,7 +27,9 @@ class WebScrapePlugin {
         // The LLM likes to search for these useless search queries.
         if (searchQuery.toLowerCase() == 'real-time data analytics'
          || searchQuery.toLowerCase() == 'coronavirus latest news'
-         || searchQuery.toLowerCase() == 'live search data') {
+         || searchQuery.toLowerCase() == 'live search data'
+         || searchQuery.toLowerCase().includes('covid')
+         || searchQuery.toLowerCase().includes('corona virus')) {
             return 'Error. Search query incorrect.  Please answer that you don\'t know.';
         }
 
