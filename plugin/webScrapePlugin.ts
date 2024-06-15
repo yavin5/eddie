@@ -1,5 +1,7 @@
-import axios, { AxiosHeaders } from 'axios';
-const { compile } = require('html-to-text');
+import { jsonToPlainText, Options } from "json-to-plain-text";
+const { compile, convert } = require('html-to-text');
+// TODO: Probably should import and use node-fetch:
+// https://github.com/node-fetch/node-fetch
 
 /**
  * Implements a web client for scraping data off the web, and
@@ -13,36 +15,57 @@ class WebScrapePlugin {
     }
 
     /**
-     * Uses an HTTP client to perform a web search GET request for live search results data, and
-     * returns the results as web response content.
+     * Uses an HTTP client to perform a web search GET request, and returns the
+     * search results as web response content.
      * @llmFunction
      * @param {string} searchQuery The free-form text of a search query request.
-     * @returns {string} The search results content containing links of web pages that contain
-     *  content that is closely related to the search query.
+     * @returns {string} The search results content containing links of web pages
+     * that contain content that is closely related to the search query.
      */
     async webSearch(searchQuery: string): Promise<string> {
-        let axiosParams = {};
 
         // Currently implemented as a search.brave.com searcher.
-        let url = 'https://api.search.brave.com/res/v1/web/search?q=' + searchQuery;
+        // count = 3 : This is supposed to return 3 results. We need small output to LLM!
+        // text_decorations = 0 : We don't want a highlighted colored text response.
+        let url = 'https://api.search.brave.com/res/v1/web/search?count=3&text_decorations=0&q=' + searchQuery;
 
-        let response;
         try {
-            const headers = new AxiosHeaders();
-            headers.set('User-Agent', 'LLM');
-            headers.set('Accept', 'application/json');
-            headers.set('Accept-Encoding', 'gzip');
-            headers.set('X-Subscription-Token',
-                process.env.PLUGIN_WEBSCRAPE_BRAVE_SEARCH_KEY);
-            console.log(JSON.stringify(headers));
-            response = await axios.get(url, { headers: headers });
-            await new Promise<void>(resolve => setTimeout(() => resolve(), 1000))
-                .then(() => console.log("WebScrapePlugin: webSearch."));
-            return this.scrapeHtmlText(response.data);
-        } catch (error) {
+            let jsonText: string = '';
+            const searchApiKey = process.env.PLUGIN_WEBSCRAPE_BRAVE_SEARCH_KEY;
+            const requestHeaders: HeadersInit = new Headers();
+            requestHeaders.set('Accept', 'application/json');
+            requestHeaders.set('Accept-Encoding', 'gzip');
+            requestHeaders.set('X-Subscription-Token', searchApiKey! || '');
+            
+            await fetch(url, {
+                method: 'GET',
+                headers: requestHeaders
+            }).then(response => response.json())
+              .then(data => { jsonText = data; })
+              .catch(error => console.error(error));
+
+            console.log("WebScrapePlugin: webSearch.");
+
+            let plainText = this.scrapeJsonToPlainText(jsonText);
+
+            // Scrape out url, title, description fields.
+            let textLines: string[] = plainText.split('\n');
+            let arrayIndex = 0;
+            for (const line of textLines) {
+                if (!(line.startsWith('url : ') || line.startsWith('title : ') || line.startsWith('description : '))) {
+                   textLines[arrayIndex] = '';
+                }
+                arrayIndex++;
+            }
+            plainText = textLines.join('\n');
+            plainText = plainText.replace(/\n\n\n(\n)+/g, '\n---\n');
+            plainText = plainText.replace(/\n\n/g, '\n');
+            //console.log('\n\n\n\nwebSearch returning: \n\n' + plainText);
+
+            return plainText;
+        } catch(error) {
             // FIXME: In the case of a 403, follow a small number of redirects.
-            response = `HTTP GET request error: ${error}`;
-            console.error(response);
+            let response = `HTTP GET request error: ${error}`;
             return response;
         }
     }
@@ -55,23 +78,18 @@ class WebScrapePlugin {
      * @returns {string} The HTTP response content
      */
     async httpGet(url: string, params?: string[]): Promise<string> {
-        // TODO: Handle HTTP sessions.
-        let axiosParams = {};
-        if (params) {
-            for (const param in params) {
-                const parts = param.split('=');
-                if (parts.length == 2) {
-                    const key = parts[0];
-                    let val = parts[1];
-                    Object.assign(axiosParams, { key: val });
-                }
-            }
-        }
+        // TODO: Handle HTTP sessions (some sites break if no cookies are returned)
+        const requestHeaders: HeadersInit = new Headers();
+        requestHeaders.set('Accept', 'application/json');
+
+        // Sometimes the LLM is sending URLs that contain spaces.  :(
         let url2 = url.replace(/\s+/g, '');
+
+        // Don't bother making requests to example.com.
         if (url2.includes('example.com') || url2.includes('example2.com')) {
-            return 'The domain example.com is not a real web site. Try a differ\
-ent site.';
+            return 'The domain example.com is not a real web site. Try a different site.';
         }
+
         if (!url2.startsWith('http')) {
             url2 = `http://${url2}`;
         }
@@ -88,27 +106,59 @@ ent site.';
                     if (params.indexOf('titles')) query = params[params.indexOf('titles')];
                 }
             }
-            url2 = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=&explaintext=&exlimit=10&titles=w:${query}`;
+            url2 = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=&explaintext=&exlimit=3&titles=w:${query}`;
         }
 
-        let response;
         try {
-            response = await axios.get(url2, { params: axiosParams });
-            await new Promise<void>(resolve => setTimeout(() => resolve(), 1000))
-                .then(() => console.log("WebScrapePlugin: httpGet."));
-            return response.data;
+            let jsonText: string = '';
+            await fetch(url, {
+                method: 'GET',
+                headers: requestHeaders
+            }).then(response => response.json())
+              .then(data => { jsonText = data; })
+              .catch(error => console.error(error));
+
+            console.log("WebScrapePlugin: httpGet.");
+            let plainText = this.scrapeJsonToPlainText(jsonText);
+            // TODO: Maybe convert this to requesting HTML, and then scrape plain text.
+            return plainText;
         } catch (error) {
             // FIXME: In the case of a 403, follow a small number of redirects.
-            response = `HTTP GET request error: ${error}`;
+            const response = `HTTP GET request error: ${error}`;
             console.error(response);
             return response;
         }
     }
 
-    async httpPost(url: string, data: Record<string, any>): Promise<any> {
+    // WIP, not ready yet.
+    async httpPost(url: string, params?: string[], data?: string): Promise<any> {
+        const requestHeaders: HeadersInit = new Headers();
+        requestHeaders.set('Accept', 'application/json');
+
+        let body: { [key: string]: any } = {};
+        if (params) {
+            for (const param in params) {
+                const parts = param.split('=');
+                if (parts.length == 2) {
+                    const key = parts[0];
+                    let val = parts[1];
+                    body[key] = val;
+                }
+            }
+        }
         try {
-            const response = await axios.post(url, data);
-            return response.data;
+            let jsonText: string = '';
+
+            await fetch(url, {
+                method: 'POST',
+                body: JSON.stringify(body),
+                headers: requestHeaders
+            }).then(response => response.json())
+              .then(data => { jsonText = data; })
+              .catch(error => console.error(error));
+
+            console.log("WebScrapePlugin: httpPost.");
+            return jsonText;
         } catch (error) {
             console.error('POST request error:', error);
             throw error;
@@ -120,16 +170,35 @@ ent site.';
      * @param {string} htmlText 
      * @returns {string} the plain text representation of the HTML.
      */
-    scrapeHtmlText(htmlText: string): string {
+    scrapeHtmlToPlainText(htmlText: string): string {
         const options = {
             wordwrap: 130,
             // ...
         };
         let compiledConvert = compile(options);
         let arr = htmlText.split(/\r?\n/);
+        console.log('HTML lines: ' + arr.length);
         let plainTextArr = arr.map(compiledConvert);
-        const separator = '\n';
-        const result: string = plainTextArr.join(separator);
+        const result: string = plainTextArr.join('\n');
+        console.log('Plain text of this HTML: ' + result);
+        return result;
+    }
+
+    /**
+    * Convert JSON text into smaller readable plain text.
+    * @param {string} jsonText
+    * @returns {string} the plain text representation of the JSON.
+    */
+    scrapeJsonToPlainText(jsonText: string): string {
+        const options: Options = {
+            color: false,                  // Whether to apply colors to the output or not
+            spacing: false,                 // Whether to include spacing before colons or not
+            seperator: ":",                // seperate keys and values.
+            squareBracketsForArray: false, // Whether to use square brackets for arrays or not
+            doubleQuotesForKeys: false,    // Whether to use double quotes for object keys or not
+            doubleQuotesForValues: false,  // Whether to use double quotes for string values or not
+        };
+        let result: string = jsonToPlainText(jsonText, options);
         return result;
     }
 }
