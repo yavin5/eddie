@@ -126,8 +126,12 @@ class WebScrapePlugin {
               .catch(error => console.error(error));
 
             console.log("WebScrapePlugin: httpGet.");
-            let plainText = this.scrapeJsonToPlainText(jsonText);
-            // TODO: Maybe convert this to requesting HTML, and then scrape plain text.
+            let plainText = '';
+            if (jsonText.startsWith('{')) {
+                plainText = this.scrapeJsonToPlainText(jsonText);
+            } else if (jsonText.startsWith('<')) {
+                plainText = this.scrapeHtmlToPlainText(jsonText);
+            }
             return plainText;
         } catch (error) {
             // FIXME: In the case of a 403, follow a small number of redirects.
