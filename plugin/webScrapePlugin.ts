@@ -25,9 +25,9 @@ class WebScrapePlugin {
     async webSearch(searchQuery: string): Promise<string> {
 
         // The LLM likes to search for these useless search queries.
-        if (searchQuery.toLowerCase() == 'real-time data analytics'
-         || searchQuery.toLowerCase() == 'coronavirus latest news'
-         || searchQuery.toLowerCase() == 'live search data'
+        if (searchQuery.toLowerCase().includes('real-time data')
+         || searchQuery.toLowerCase().includes('coronavirus')
+         || searchQuery.toLowerCase().includes('live search data')
          || searchQuery.toLowerCase().includes('covid')
          || searchQuery.toLowerCase().includes('corona virus')) {
             return 'Error. Search query incorrect.  Please answer that you don\'t know.';
@@ -99,10 +99,10 @@ class WebScrapePlugin {
             return 'The domain example.com is not a real web site. Try a different site.';
         }
         // Disallow repeated useless web interrogation that the LLM tends to do.
-        if (url2.toLowerCase().includes('real-time data analytics')
+        if (url2.toLowerCase().includes('real-time data')
          || url2.toLowerCase().includes('coronavirus')
          || url2.toLowerCase().includes('covid')) {
-            return 'The domain example.com is not a real web site. Try a different site.';
+            return 'ERROR. Your query is wrong. Stay on topic of the user\'s question.';
         }
 
         if (!url2.startsWith('http')) {
