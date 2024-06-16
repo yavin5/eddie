@@ -199,7 +199,7 @@ class WebScrapePlugin {
         console.log('HTML lines: ' + arr.length);
         let plainTextArr = arr.map(compiledConvert);
         const result: string = plainTextArr.join('\n');
-        console.log('Plain text of this HTML: ' + result);
+        //console.log('Plain text of this HTML: ' + result);
         return result;
     }
 
