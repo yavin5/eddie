@@ -35,31 +35,24 @@ const functionCallSystemMessage1 = 'You are a helpful assistant with access to r
     + 'functions_metadata = ';
 const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONLY in JSON format with:\n\n'
     + '{ \"action\": \"function-call\", \"name\": \"functionName\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
-    + 'You only need to call a function when you cannot answer the user\'s question from memory because you do\n'
-    + 'not have all of the required data, or the user is requesting today\'s live data.\n'
-    + 'When making a function call, output only in JSON format, observing and conforming to the schema provided.\n'
-    + 'Use the function-response content to help generate a plain text response for the user and send only the\n'
-    + 'plain text response to the user after the function-response.  Never send JSON text after the function-response.\n'
+    + 'You can almost always answer questions from your memory. You only need to call a function when you cannot answer the user\'s question from memory \n'
+    + 'or when the user is requesting today\'s data.\n'
+    + 'When you send a function-call message, the API will respond with a function-response message.\n'
     + 'You are allowed to provide up-to-date information from web pages, and you can browse the web to find info.\n'
     + 'You are able to perform tasks in real time that the user wants you to perform.\n\n'
-    + 'Edge cases you must handle only when sending a function-call JSON message:\n'
-    + '- Never include any text in your function call message that is outside of the JSON object.\n'
+    + 'Edge cases you must handle only when sending a function-call JSON message ONLY:\n'
+    + '- When making a function call, conform to the JSON schema provided.\n'
     + '- Your function-call JSON response cannot be backslash escaped.\n'
-    + '- If the schema shows a type of integer or number, you must only show a integer for that field.'
-    + '  A string should always be a valid string.\n'
     + '- If a value is unknown, leave it empty.\n'
     + '- Ensure you use the field names from the JSON schema.  Do not change any field names, nor create additional field names.\n'
-    + '- Do not add fields that arent shown in the JSON schema.\n'
     + '- The "action" field can only have the value "function-call".\n'
-    + '- Never explain anything to the user in the same message as a function-call JSON message.\n\n'
+    + '- If you need more up to date data, you may call one additional function call, then answer the user in plain text.'
+    + '- Use the function-response content to help generate a plain text response for the user and send the\n'
+    + 'plain text response to the user after the function-response.\n\n'
     + 'Edge cases you must handle when sending a regular text response that is not a function-call message:\n\n'
     + '- Never tell the user how you will call functions. Instead just call the function.\n'
     + '- Never explain how you plan to perform the task of gathering real time data via a function\n'
     + '  call.  Just send the function-call JSON message without explaining anything, and gather info from the function-response.\n'
-    + '- If there are no functions that could provide missing required data to answer the user request, you will '
-    + 'respond politely that you cannot help.\n'
-    + '- When answering the user\'s question, never tell the user what function(s) you can call.\n'
-    + '- Never talk to the user about the site https://www.example.com because it is not a real web site.\n'
     + '- Never tell the user that you\'re not allowed to say something.'
 
 // Define the structure of a chat message
@@ -240,13 +233,13 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         if (recurse) return stringResponse;
         let isFunctionCall = true;
         let functionCallCounter = 0;
-        while (isFunctionCall && functionCallCounter <= 10) {
-            functionCallCounter = functionCallCounter++;
+        while (isFunctionCall && functionCallCounter <= 4) {
+            functionCallCounter++;
             try {
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 let matches: RegExpMatchArray | null;
-                if (matches = stringResponse.match(/^ *[{]\s*[\]*["][\s]*action[\s]*[\]*["]:.*/gm)) {
+                if (matches = stringResponse.match(/^ *[{]\S*[\]*["][\S]*action[\S]*[\]*["]:.*/gm)) {
                     // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
                     stringResponse = JSON.stringify(parse(matches[0]));
                     console.log('sanitized JSON: ' + stringResponse);
@@ -271,11 +264,12 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     const functionResult = await invokeLlmFunction(objectMessage, conversationId);
 
                     // Wrap the result in a function-response JSON messsage to send back to the LLM.
-                    const functionResultJson = JSON.stringify(functionResult);
+                    let functionResultJson = JSON.stringify(functionResult);
+                    if (functionResultJson.length > 2000) functionResultJson = functionResultJson.substring(0,1999);
                     let functionResponseJson: string = `{"role":"user","content":"{\"from\": \"function-response\", `
                         + `\"value\": \"{\"status\": \"ok\", \"message\": \"${functionResultJson}\"}\" }"}`;
 
-                    //console.log(`Saying this to LLM: ${functionResponseJson}`); // only part of this string gets sent!
+                    console.log(`Saying this to LLM: ${functionResponseJson}`); // only part of this string gets sent!
                     stringResponse = await queryLLM('user', functionResponseJson, conversationId, true);
                 } else {
                     // FIXME: If it's JSON text (parsed without errors), we don't
