@@ -269,8 +269,8 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     // Clip the function call result text to a configurable max number of bytes.
                     let maxBytes: number = 1024;
                     const llmFunctionResponseMaxBytes: unknown = process.env.LLM_FUNCTION_RESPONSE_MAX_BYTES;
+                    if (typeof llmFunctionResponseMaxBytes === 'number') maxBytes = llmFunctionResponseMaxBytes;
                     console.log(`Max function call response bytes allowed: ${maxBytes}`);
-                    if (typeof llmFunctionResponseMaxBytes === 'string') maxBytes = Number.parseInt(llmFunctionResponseMaxBytes);
                     if (functionResult.length > maxBytes) functionResult = functionResult.substring(0, maxBytes);
                     
                     // Wrap the result in a function-response JSON messsage to send back to the LLM.
