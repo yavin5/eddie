@@ -304,7 +304,9 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
             console.log('Error: Final response would have been: \n${stringResponse}');
             stringResponse = 'Sorry, I am unable to process your request right now. (581)';
         }
-        stringResponse = stringResponse.replace(/(["$`'\\])/g,'\\$1');
+        stringResponse = stringResponse.replace(/(["$`\\])/g,'\\$1');
+        // BASH-escape single quote correctly.
+        stringResponse = stringResponse.replace(/(['])/g,'\'\\\'\'');
 
         // Add the LLM's response to the conversation context
         conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
