@@ -230,11 +230,14 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         const response = await axios.post(llmApiUrl, { model: model, messages: conversationContext.chatMessages, stream: false, keep_alive: "15m" });
         let stringResponse: string = response.data.message.content;
         console.log(`stringResponse: ${stringResponse}`);
+
+        // In the case of a recurse, it's a function call cycle, so return here early.
         if (recurse) return stringResponse;
+
         let isFunctionCall = true;
         let functionCallCounter = 0;
-        while (isFunctionCall && functionCallCounter <= 4) {
-            functionCallCounter++;
+        while (isFunctionCall && functionCallCounter++ <= 4) {
+            if (functionCallCounter > 0) console.log(`Function call ${functionCallCounter}`);
             try {
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
@@ -260,20 +263,27 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
                     console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
 
-                    // Try to invoke the LLM function, and send the result to the LLM.
-                    const functionResult = await invokeLlmFunction(objectMessage, conversationId);
+                    // Try to invoke the LLM function, then send the result to the LLM.
+                    let functionResult = await invokeLlmFunction(objectMessage, conversationId);
 
+                    // Clip the function call result text to a configurable max number of bytes.
+                    let maxBytes: number = 1024;
+                    const llmFunctionResponseMaxBytes: unknown = process.env.LLM_FUNCTION_RESPONSE_MAX_BYTES;
+                    console.log(`Max function call response bytes allowed: ${maxBytes}`);
+                    if (typeof llmFunctionResponseMaxBytes === 'number') maxBytes = llmFunctionResponseMaxBytes;
+                    if (functionResult.length > maxBytes) functionResult = functionResult.substring(0, maxBytes);
+                    
                     // Wrap the result in a function-response JSON messsage to send back to the LLM.
                     let functionResultJson = JSON.stringify(functionResult);
-                    if (functionResultJson.length > 2000) functionResultJson = functionResultJson.substring(0,1999);
                     let functionResponseJson: string = `{"role":"user","content":"{\"from\": \"function-response\", `
                         + `\"value\": \"{\"status\": \"ok\", \"message\": \"${functionResultJson}\"}\" }"}`;
 
+                    // Recursive call to queryLLM(), but the nested one returns early.
                     console.log(`Saying this to LLM: ${functionResponseJson}`); // only part of this string gets sent!
                     stringResponse = await queryLLM('user', functionResponseJson, conversationId, true);
                 } else {
-                    // FIXME: If it's JSON text (parsed without errors), we don't
-                    // want to show that to the user, so try to extract / remove it.
+                    // FIXME: If it's JSON text (parsed without errors) but it isn't a
+                    // function call, we don't want to show that to the user, so try to extract / remove it.
                     isFunctionCall = false;
                 }
             } catch (e) {
@@ -283,6 +293,17 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         }
         console.log('Not a function call..');
 
+        // Remove the function call junk from the conversation context so behavior goes back to normal.
+        let messages = conversationContext.chatMessages;
+        while (messages[messages.length - 1].content.startsWith('{')) {
+            messages.splice(messages.length - 1, 1);
+        }
+
+        // If at the end it is still a JSON message, hide that from the user.
+        if (stringResponse.startsWith('{')) {
+            console.log('Error: Final response would have been: \n${stringResponse}');
+            stringResponse = 'Sorry, I am unable to process your request right now. (581)';
+        }
         stringResponse = stringResponse.replace(/(["$`\\])/g,'\\$1');
 
         // Add the LLM's response to the conversation context
@@ -293,7 +314,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         return stringResponse;
     } catch (error) {
         console.error('Error querying LLM:', error);
-        return 'Sorry, I am unable to process your request right now.';
+        return 'Sorry, I am unable to process your request right now. (580)';
     }
 }
 
