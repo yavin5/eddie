@@ -107,7 +107,7 @@ function sendMessage(recipient: string, message: string): void {
     if (recipient.endsWith('=')) {
         recipientCli = `-g ${recipientCli}`;
     }
-    const command = `${signalCliPath} -u ${botPhoneNumber} send -m "${message}" ${recipientCli}`;
+    const command = `${signalCliPath} -u ${botPhoneNumber} send -m '${message}' ${recipientCli}`;
     console.log(command);
     exec(command);
 }
@@ -304,7 +304,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
             console.log('Error: Final response would have been: \n${stringResponse}');
             stringResponse = 'Sorry, I am unable to process your request right now. (581)';
         }
-        stringResponse = stringResponse.replace(/(["$`\\])/g,'\\$1');
+        stringResponse = stringResponse.replace(/(["$`'\\])/g,'\\$1');
 
         // Add the LLM's response to the conversation context
         conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
