@@ -36,7 +36,7 @@ class WebScrapePlugin {
         // Currently implemented as a search.brave.com searcher.
         // count = 3 : This is supposed to return 3 results. We need small output to LLM!
         // text_decorations = 0 : We don't want a highlighted colored text response.
-        let url = 'https://api.search.brave.com/res/v1/web/search?count=3&text_decorations=0&q=' + searchQuery;
+        let url = 'https://api.search.brave.com/res/v1/web/search?count=6&text_decorations=0&q=' + searchQuery;
 
         try {
             let jsonText: string = '';
