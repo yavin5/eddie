@@ -277,7 +277,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     // Wrap the result in a function-response JSON messsage to send back to the LLM.
                     let functionResultJson = JSON.stringify(functionResult);
                     let functionResponseJson: string = `{"role":"user","content":"{\"from\": \"function-response\", `
-                        + `\"value\": \"{\"status\": \"ok\", \"message\": \"${functionResultJson}\"}\" }"}`;
+                        + `\"value\": \"{\"status\": \"ok\", \"message\": ${functionResultJson}}\" }"}`;
 
                     // Recursive call to queryLLM(), but the nested one returns early.
                     console.log(`Saying this to LLM: ${functionResponseJson}`); // only part of this string gets sent!
