@@ -1,5 +1,6 @@
 import { jsonToPlainText, Options } from "json-to-plain-text";
-const { compile, convert } = require('html-to-text');
+import { JSDOM } from 'jsdom';
+//import fetch from 'node-fetch';
 // TODO: Probably should import and use node-fetch:
 // https://github.com/node-fetch/node-fetch
 
@@ -190,17 +191,22 @@ class WebScrapePlugin {
      * @returns {string} the plain text representation of the HTML.
      */
     scrapeHtmlToPlainText(htmlText: string): string {
-        const options = {
-            wordwrap: 130,
-            // ...
-        };
-        let compiledConvert = compile(options);
-        let arr = htmlText.split(/\r?\n/);
-        console.log('HTML lines: ' + arr.length);
-        let plainTextArr = arr.map(compiledConvert);
-        const result: string = plainTextArr.join('\n');
-        //console.log('Plain text of this HTML: ' + result);
-        return result;
+        const dom = new JSDOM(htmlText);
+        const document = dom.window.document;
+
+        // Remove all <script>, <style>, and <svg> elements
+        Array.from(document.querySelectorAll('script, style, svg')).forEach(element => {
+            (element as any).remove();
+        });
+
+        // Extract text content
+        const textContent = document.body.textContent || '';
+  
+        // Normalize whitespace
+        const plainText = textContent.replace(/\s+/g, ' ').trim();
+
+        //console.log(`Plain text of this HTML: ${plainText}`);
+        return plainText;
     }
 
     /**
