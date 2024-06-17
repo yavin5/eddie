@@ -276,8 +276,8 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     
                     // Wrap the result in a function-response JSON messsage to send back to the LLM.
                     let functionResultJson = JSON.stringify(functionResult);
-                    let functionResponseJson: string = `{"role":"user","content":"{\"from\": \"function-response\", `
-                        + `\"value\": \"{\"status\": \"ok\", \"message\": ${functionResultJson}}\" }"}`;
+                    let functionResponseJson: string = `{"role":"user","content":"{\\"from\\": \\"function-response\\", `
+                        + `\\"value\\": \\"{\\"status\\": \\"OK\\", \\"message\\": ${functionResultJson}}\\" }"}`;
 
                     // Recursive call to queryLLM(), but the nested one returns early.
                     console.log(`Saying this to LLM: ${functionResponseJson}`); // only part of this string gets sent!
@@ -305,7 +305,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
             console.log('Error: Final response would have been: \n${stringResponse}');
             stringResponse = 'Sorry, I am unable to process your request right now. (581)';
         }
-        stringResponse = stringResponse.replace(/(["$`\\])/g,'\\$1');
+        stringResponse = stringResponse.replace(/([`\\])/g,'\\$1');
         // BASH-escape single quote correctly.
         stringResponse = stringResponse.replace(/(['])/g,'\'\\\'\'');
 
