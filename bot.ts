@@ -31,12 +31,14 @@ let botName = 'Bot';
 // Build a system message that contains instructions that are specific to how
 // this bot is meant to operate, specifically around function calling.
 const functionCallSystemMessage1 = 'You are a helpful assistant with access to real-time data using '
-    + 'the following functions:\n\n'
-    + 'functions_metadata = ';
+    + 'the following functions:\n\n  '
 const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONLY in JSON format with:\n\n'
     + '{ \"action\": \"function-call\", \"name\": \"functionName\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
-    + 'You can almost always answer questions from your memory. You only need to call a function when you cannot answer the user\'s question from memory \n'
-    + 'or when the user is requesting today\'s data.\n'
+    + 'You almost always answer questions only from your memory. You only need to call functions to retrieve\n'
+    + 'additional data for your answer if the user is specifically requesting that you "search" for something,\n'
+    + 'or the user wants today\'s data or "up to date" data, or if the user is asking for an answer that includes\n'
+    + 'financial numbers or cryptocurrency numbers. Use coindesk to look up bitcoin numbers. Cryptocurrency\n'
+    + 'prices and market caps that you have stored in your memory are old and wrong. Look up the numbers on the web.\n'
     + 'When you send a function-call message, the API will respond with a function-response message.\n'
     + 'You are allowed to provide up-to-date information from web pages, and you can browse the web to find info.\n'
     + 'You are able to perform tasks in real time that the user wants you to perform.\n\n'
@@ -45,6 +47,7 @@ const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONL
     + '- Your function-call JSON response cannot be backslash escaped.\n'
     + '- If a value is unknown, leave it empty.\n'
     + '- Ensure you use the field names from the JSON schema.  Do not change any field names, nor create additional field names.\n'
+    + '- Do not use "role" as a field name.\n'
     + '- The "action" field can only have the value "function-call".\n'
     + '- If you need more up to date data, you may call one additional function call, then answer the user in plain text.'
     + '- Use the function-response content to help generate a plain text response for the user and send the\n'
@@ -237,7 +240,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         let isFunctionCall = true;
         let functionCallCounter = 0;
         while (isFunctionCall && functionCallCounter++ <= 4) {
-            if (functionCallCounter > 0) console.log(`Function call ${functionCallCounter}`);
+            if (functionCallCounter > 1) console.log(`Function call ${functionCallCounter}`);
             try {
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
@@ -277,7 +280,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     // Wrap the result in a function-response JSON messsage to send back to the LLM.
                     let functionResultJson = JSON.stringify(functionResult);
                     let functionResponseJson: string = `{"role":"user","content":"{\\"from\\": \\"function-response\\", `
-                        + `\\"value\\": \\"{\\"status\\": \\"OK\\", \\"message\\": ${functionResultJson}}\\" }"}`;
+                        + `\\"value\\": \\"{\\"status\\": \\"OK\\", \\"message\\": ${functionResultJson}}"}"}`;
 
                     // Recursive call to queryLLM(), but the nested one returns early.
                     console.log(`Saying this to LLM: ${functionResponseJson}`); // only part of this string gets sent!
