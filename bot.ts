@@ -214,6 +214,13 @@ function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
     }
     prunedMessages.unshift(messages[0]);
 
+    // Temporarily list the context.
+    let count = 0;
+    for (const msg of prunedMessages) {
+        console.log(count + ': ' + msg.content.substring(0,150));
+        count++;
+    }
+
     return prunedMessages;
 }
 
