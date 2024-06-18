@@ -257,9 +257,11 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 }
                 if (objectMessage['function_name']) objectMessage['name'] = objectMessage['function_name'];
                 if (objectMessage['parameters']) objectMessage['arguments'] = objectMessage['parameters'];
-                // If it says action=literally anything, and otherwise the JSON
+                // If it says action: literally anything, and otherwise the JSON
                 // works as a function-call, just take it and invoke LLM func.
-                if (objectMessage.action && objectMessage.action && objectMessage.name && objectMessage.arguments) {
+                // Also sometimes the LLM says role: function when it's directed not to.
+                if (objectMessage.action && objectMessage.name && objectMessage.arguments
+                    || objectMessage.role && objectMessage.name && objectMessage.arguments) {
                     console.log("Received a function call message from the LLM.");
 
                     // Add the LLM's response to the conversation context
