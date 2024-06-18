@@ -59,6 +59,7 @@ const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONL
     + '- Never explain how you plan to perform the task of gathering real time data via a function\n'
     + '  call.  Just send the function-call JSON message without explaining anything, and gather info from the function-response.\n'
     + '- Never tell the user that you\'re not allowed to say something.'
+    + 'Today\'s date and time is: ' + new Date();
 
 // Define the structure of a chat message
 interface ChatMessage {
