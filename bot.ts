@@ -360,7 +360,7 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
             console.log(`Invoker argumentName: ${argumentName}`);
             const argumentValue = (oArguments as any)[argumentName];
             console.log(`Invoker arg type: ` + typeof argumentValue);
-            // FIXME: support non-string argument values!
+            // TODO: support non-string argument values!
             const argumentStringValue: string = argumentValue.toString();
             console.log(`Invoker added arg: ${argumentStringValue}`);
             // Array of string arguments are supported.
@@ -376,6 +376,15 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
                 // Regular string arguments are supported.
                 if (argumentStringValue.length > 0) {
                     funcArgs.push(argumentStringValue);
+
+                    // At least in the case of the WebScrapePlugin, one string argument
+                    // is the URL, and the user may be interested to know which URLs
+                    // the LLM is reading, in the course of answering a prompt.
+                    // TODO: Make this toggleable via configuration.
+                    if (argumentStringValue.toLocaleLowerCase().startsWith('http://') ||
+                        argumentStringValue.toLocaleLowerCase().startsWith('https://')) {
+                        sendMessage(conversationId, `🤖 ${argumentStringValue}`);
+                    }
                 }
             }
         }
