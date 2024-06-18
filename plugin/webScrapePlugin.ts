@@ -35,9 +35,10 @@ class WebScrapePlugin {
         }
 
         // Currently implemented as a search.brave.com searcher.
-        // count = 3 : This is supposed to return 3 results. We need small output to LLM!
+        // count = 6 : This is supposed to return 6 results. We need small output to LLM!
+        // freshness = pw : Return results that are fresh to within 1 week.
         // text_decorations = 0 : We don't want a highlighted colored text response.
-        let url = 'https://api.search.brave.com/res/v1/web/search?count=6&text_decorations=0&q=' + searchQuery;
+        let url = 'https://api.search.brave.com/res/v1/web/search?count=6&freshness=pw&text_decorations=0&q=' + searchQuery;
 
         try {
             let jsonText: string = '';
