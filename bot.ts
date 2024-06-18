@@ -53,7 +53,7 @@ const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONL
     + '- Use the function-response content to help generate a plain text response for the user and send the\n'
     + 'plain text response to the user after the function-response.\n\n'
     + 'Edge cases you must handle when sending a regular text response that is not a function-call message:\n\n'
-    + '- Do not ever answer the user\'s prompt or question in JSON format when you are not sending a function-call request.\n'
+    + '- Never answer the user\'s prompt or question in JSON format when you are not sending a function-call request.\n'
     + '- Never send the user an answer in the form of a programming language or a programming format unless they\n'
     + '  explicitly asked for that. Answer entirely in their natural language instead.\n'
     + '- Never tell the user how you will call functions. Instead just call the function.\n'
