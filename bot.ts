@@ -57,6 +57,7 @@ const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONL
     + '- Never send the user an answer in the form of a programming language or a programming format unless they\n'
     + '  explicitly asked for that. Answer entirely in their natural language instead.\n'
     + '- Answer very short (25 words or less) and exactly to the point, unless specifically asked for a lot of detail.\n'
+    + '  Do not include keywords, summary, nor meta information in your response unless the user asks for that.\n'
     + '- Never tell the user how you will call functions. Instead just call the function.\n'
     + '- Never explain how you plan to perform the task of gathering real time data via a function\n'
     + '  call.  Just send the function-call JSON message without explaining anything, and gather info from the function-response.\n'
