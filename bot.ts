@@ -58,7 +58,7 @@ const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONL
     + '- Never tell the user how you will call functions. Instead just call the function.\n'
     + '- Never explain how you plan to perform the task of gathering real time data via a function\n'
     + '  call.  Just send the function-call JSON message without explaining anything, and gather info from the function-response.\n'
-    + '- Never tell the user that you\'re not allowed to say something.'
+    + '- Never tell the user that you\'re not allowed to say something.\n\n'
     + 'Today\'s date and time is: ' + new Date().getUTCDate();
 
 // Define the structure of a chat message
