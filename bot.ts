@@ -324,22 +324,25 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
         // If at the end it is still a JSON message, hide that from the user.
         if (stringResponse.startsWith('{')) {
+            // Still begins with a JSON.
             console.log('Error: Final response would have been: \n${stringResponse}');
-            stringResponse = 'Sorry, I am unable to process your request right now. (581)';
-        }
-        stringResponse = stringResponse.replace(/([`\\])/g,'\\$1');
-        // BASH-escape single quote correctly.
-        stringResponse = stringResponse.replace(/(['])/g,'\'\\\'\'');
+            stringResponse = '😳 Error, sorry. (581)';
+        } else {
+            // It doesn't begin with a JSON.
+            stringResponse = stringResponse.replace(/([`\\])/g,'\\$1');
+            // BASH-escape single quote correctly.
+            stringResponse = stringResponse.replace(/(['])/g,'\'\\\'\'');
 
-        // Add the LLM's response to the conversation context
-        conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
-        console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
+            // Add the LLM's response to the conversation context
+            conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
+            console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
+        }
 
         //console.log(response); // Uncomment this to see the HTTP response.
         return stringResponse;
     } catch (error) {
         console.error('Error querying LLM:', error);
-        return 'Sorry, I am unable to process your request right now. (580)';
+        return '😳 Error, sorry. (580)';
     }
 }
 
