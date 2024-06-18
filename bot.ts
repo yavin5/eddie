@@ -295,6 +295,10 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     // FIXME: If it's JSON text (parsed without errors) but it isn't a
                     // function call, we don't want to show that to the user, so try to extract / remove it.
                     isFunctionCall = false;
+
+                    if (objectMessage.action && objectMessage.content) {
+                        stringResponse = objectMessage.content;
+                    }
                 }
             } catch (e) {
                 // The response was plain text, so we'll give it to the user.
