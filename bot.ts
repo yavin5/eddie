@@ -243,8 +243,15 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         conversationContext.chatMessages.push({ role: actor, content: message, images: [] });
         conversationContext.chatMessages = pruneChatMessages(conversationContext.chatMessages);
         console.log('Context now has (after prune) ' + conversationContext.chatMessages.length + ' messsages.');
-
-        const response = await axios.post(llmApiUrl, { model: model, messages: conversationContext.chatMessages, stream: false, keep_alive: "15m" });
+        const response = await axios.post(llmApiUrl, {
+            model: model,
+            messages: conversationContext.chatMessages,
+            options: {
+                "num_ctx": llmModelContextSize
+            },
+            stream: false,
+            keep_alive: "15m"
+        });
         let stringResponse: string = response.data.message.content;
         console.log(`stringResponse: ${stringResponse}`);
 
