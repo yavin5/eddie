@@ -276,7 +276,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 let matches: RegExpMatchArray | null;
-                if (matches = stringResponse.match(/^\S*[{]\S*[\\]*["][\S]*action[\S]*[\\]*["]:.*/gm)) {
+                if (matches = stringResponse.match(/^[\s]*{[\s\n\r]*[\\]*["][\s]*action[\s]*[\\]*["][\s]*:.*/gm)) {
                     // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
                     stringResponse = JSON.stringify(parse(matches[0]));
                     console.log('sanitized JSON: ' + stringResponse);
