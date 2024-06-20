@@ -411,7 +411,7 @@ function shouldWebScrape(message: string, conversationContext: ConversationConte
 }
 
 async function invokeLlmFunction(objectMessage: any, conversationId: string): Promise<string> {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         try {
             // Determine if the function the LLM wants to call is an exposed LLM function.
             const functionName = objectMessage.name;
