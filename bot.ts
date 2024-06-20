@@ -44,6 +44,7 @@ const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONL
     + 'You are allowed to provide up-to-date information from web pages, and you can browse the web to find info.\n'
     + 'You are able to perform tasks in real time that the user wants you to perform.\n\n'
     + 'Edge cases you must handle only when sending a function-call JSON message ONLY:\n'
+    + '- Never answer the user in python code. Send only a JSON message.\n'
     + '- When making a function call, conform to the JSON schema provided.\n'
     + '- Your function-call JSON response cannot be backslash escaped.\n'
     + '- If a value is unknown, leave it empty.\n'
@@ -341,6 +342,8 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         if (webScrape) {
             // Remove the function call system message also.
             messages.splice(messages.length - 2, 1);
+            webScrape = false;
+            console.log('WebScrape mode disabled.');
         }
 
         // FIXME: We need to decide earlier in the code if it's a hidden function call or not.
