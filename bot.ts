@@ -278,7 +278,10 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 let matches: RegExpMatchArray | null;
                 if (matches = stringResponse.match(/^[\s]*{[\s\n\r]*[\\]*["][\s]*action[\s]*[\\]*["][\s]*:.*/gm)) {
                     // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
-                    stringResponse = JSON.stringify(parse(matches[0]));
+                    //stringResponse = JSON.stringify(parse(matches[0]));
+
+                    // Clip out from the first '{' to the last '}'.
+                    stringResponse = stringResponse.substring(stringResponse.indexOf('{'),stringResponse.lastIndexOf('}') + 1);
                     console.log('sanitized JSON: ' + stringResponse);
                 }
                 let objectMessage = JSON.parse(stringResponse);
@@ -328,6 +331,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     }
                 }
             } catch (e) {
+                console.log('Error: ' + e);
                 // The response was plain text, so we'll give it to the user.
                 isFunctionCall = false;
             }
@@ -407,69 +411,79 @@ function shouldWebScrape(message: string, conversationContext: ConversationConte
 }
 
 async function invokeLlmFunction(objectMessage: any, conversationId: string): Promise<string> {
-    // Determine if the function the LLM wants to call is an exposed LLM function.
-    const functionName = objectMessage.name;
-    let func: string | undefined = undefined;
-    for (let toolFunction of plugins.tools) {
-        if (toolFunction && toolFunction.function) {
-            console.log(`Invoker comparing ${toolFunction.function.name} to ${functionName}`);
-            if (toolFunction.function.name == functionName) {
-                func = functionName;
-                console.log(`Invoker validated ${functionName} !`);
-                break;
-            }
-        }
-    }
-    // FIXME: addionally validate that the argument list applies.
-    // https://stackoverflow.com/questions/51851677/how-to-get-argument-types-from-function-in-typescript
-    if (func !== undefined) {
-        console.log('Invoker invoking LLM function.');
-        const funcArgs: any[] = [];
-        const oArguments: object = objectMessage.arguments;
-        for(let argName of Object.getOwnPropertyNames(oArguments)) {
-            const argumentName = argName.toString();
-            console.log(`Invoker argumentName: ${argumentName}`);
-            const argumentValue = (oArguments as any)[argumentName];
-            console.log(`Invoker arg type: ` + typeof argumentValue);
-            // TODO: support non-string argument values!
-            const argumentStringValue: string = argumentValue.toString();
-            console.log(`Invoker added arg: ${argumentStringValue}`);
-            // Array of string arguments are supported.
-            if (Array.isArray(argumentValue) ||
-                argumentStringValue.startsWith('[') &&
-                argumentStringValue.endsWith(']')) {
-                const stringArray: string[] = [];
-                for (const stringValue in argumentValue) {
-                    stringArray.push(stringValue);
-                }
-                funcArgs.push(stringArray);
-            } else {
-                // Regular string arguments are supported.
-                if (argumentStringValue.length > 0) {
-                    funcArgs.push(argumentStringValue);
-
-                    // At least in the case of the WebScrapePlugin, one string argument
-                    // is the URL, and the user may be interested to know which URLs
-                    // the LLM is reading, in the course of answering a prompt.
-                    // TODO: Make this toggleable via configuration.
-                    if (argumentStringValue.toLocaleLowerCase().startsWith('http://') ||
-                        argumentStringValue.toLocaleLowerCase().startsWith('https://')) {
-                        sendMessage(conversationId, `🤖 ${argumentStringValue}`);
+    return new Promise((resolve, reject) => {
+        try {
+            // Determine if the function the LLM wants to call is an exposed LLM function.
+            const functionName = objectMessage.name;
+            let func: string | undefined = undefined;
+            for (let toolFunction of plugins.tools) {
+                if (toolFunction && toolFunction.function) {
+                    console.log(`Invoker comparing ${toolFunction.function.name} to ${functionName}`);
+                    if (toolFunction.function.name == functionName) {
+                        func = functionName;
+                        console.log(`Invoker validated ${functionName} !`);
+                        break;
                     }
                 }
             }
-        }
-        console.log('Invoker: ' + functionName + '(' + JSON.stringify(funcArgs) + ') arg count=' + funcArgs.length);
-        try {
-            // INVOKE the LLM function!
-            const stringResult = await plugins[functionName](...funcArgs);
-            console.log(`Invoker received result: ${stringResult}`);
-            return stringResult;
+            // FIXME: addionally validate that the argument list applies.
+            // https://stackoverflow.com/questions/51851677/how-to-get-argument-types-from-function-in-typescript
+            if (func !== undefined) {
+                console.log('Invoker invoking LLM function.');
+                const funcArgs: any[] = [];
+                const oArguments: object = objectMessage.arguments;
+                for (let argName of Object.getOwnPropertyNames(oArguments)) {
+                    const argumentName = argName.toString();
+                    console.log(`Invoker argumentName: ${argumentName}`);
+                    const argumentValue = (oArguments as any)[argumentName];
+                    console.log(`Invoker arg type: ` + typeof argumentValue);
+                    // TODO: support non-string argument values!
+                    const argumentStringValue: string = argumentValue.toString();
+                    console.log(`Invoker added arg: ${argumentStringValue}`);
+                    // Array of string arguments are supported.
+                    if (Array.isArray(argumentValue) ||
+                        argumentStringValue.startsWith('[') &&
+                        argumentStringValue.endsWith(']')) {
+                        const stringArray: string[] = [];
+                        for (const stringValue in argumentValue) {
+                            stringArray.push(stringValue);
+                        }
+                        funcArgs.push(stringArray);
+                    } else {
+                        // Regular string arguments are supported.
+                        if (argumentStringValue.length > 0) {
+                            funcArgs.push(argumentStringValue);
+
+                            // At least in the case of the WebScrapePlugin, one string argument
+                            // is the URL, and the user may be interested to know which URLs
+                            // the LLM is reading, in the course of answering a prompt.
+                            // TODO: Make this toggleable via configuration.
+                            if (argumentStringValue.toLocaleLowerCase().startsWith('http://') ||
+                                argumentStringValue.toLocaleLowerCase().startsWith('https://')) {
+                                sendMessage(conversationId, `🤖 ${argumentStringValue}`);
+                            }
+                        }
+                    }
+                }
+                console.log('Invoker: ' + functionName + '(' + JSON.stringify(funcArgs) + ') arg count=' + funcArgs.length);
+                try {
+                    // INVOKE the LLM function!
+                    const stringResult = await plugins[functionName](...funcArgs);
+                    console.log(`Invoker received result: ${stringResult}`);
+                    resolve(stringResult);
+                } catch (error) {
+                    console.log(`Invoker: ${error}`);
+                    reject(error);
+                }
+            } else {
+                console.log(`The function name ${functionName} didn't match any LLM function.`);
+                reject('No such function.');
+            }
         } catch (error) {
-            console.log(`Invoker: ${error}`);
+            console.log(error);
+            reject(error);
         }
     }
-    return ''; // FIXME: throw exception here instead.
 }
 
 async function processQueuedMessages(botName: string, receivedArray: Array<any>) {
