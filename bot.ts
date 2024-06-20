@@ -483,7 +483,7 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
             console.log(error);
             reject(error);
         }
-    }
+    })
 }
 
 async function processQueuedMessages(botName: string, receivedArray: Array<any>) {
