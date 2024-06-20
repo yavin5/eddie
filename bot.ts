@@ -30,15 +30,16 @@ let botName = 'Bot';
 
 // Build a system message that contains instructions that are specific to how
 // this bot is meant to operate, specifically around function calling.
-const functionCallSystemMessage1 = 'You are a helpful assistant with access to real-time data using '
+const functionCallSystemMessage1 = 'You are a helpful assistant with access to real-time data from the web using '
     + 'the following functions:\n\n  '
 const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONLY in JSON format with:\n\n'
     + '{ \"action\": \"function-call\", \"name\": \"functionName\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
-    + 'You almost always answer questions only from your memory. You only need to call functions to retrieve\n'
-    + 'additional data for your answer if the user is specifically requesting that you "search" for something,\n'
-    + 'or the user wants today\'s data or "up to date" data, or if the user is asking for an answer that includes\n'
-    + 'financial numbers or cryptocurrency numbers. Use coindesk to look up bitcoin numbers. Cryptocurrency\n'
-    + 'prices and market caps that you have stored in your memory are old and wrong. Look up the numbers on the web.\n'
+    + 'You NEVER answer questions from your memory. You always ONLY answer questions by retrieving\n'
+    + 'additional data for your answer by searching the web and then reading web pages of the search results.\n'
+    + 'The user always wants today\'s data or "up-to-date" data, and you DO have access to up-to-date data.\n'
+    + 'Prices, and market caps, all data that you have stored in your memory are old and wrong. Never answer from your memory,\n'
+    + 'instead always look up the answers starting by performing a web search function-call.\n'
+    
     + 'When you send a function-call message, the API will respond with a function-response message.\n'
     + 'You are allowed to provide up-to-date information from web pages, and you can browse the web to find info.\n'
     + 'You are able to perform tasks in real time that the user wants you to perform.\n\n'
@@ -61,9 +62,7 @@ const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONL
     + '- Never tell the user how you will call functions. Instead just call the function.\n'
     + '- Never explain how you plan to perform the task of gathering real time data via a function\n'
     + '  call.  Just send the function-call JSON message without explaining anything, and gather info from the function-response.\n'
-    + '- Never tell the user that you\'re not allowed to say something.\n\n'
-    + 'Today\'s date and time is: ' + new Date().toISOString() + '\n'
-    + 'If the user asks what today\'s date or time is, just tell them from memory and do not make any web requests.';
+    + '- Never tell the user that you\'re not allowed to say something.\n\n';
 
 // Define the structure of a chat message
 interface ChatMessage {
@@ -239,16 +238,26 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
             console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');            
         }
 
+        // Determine if the LLM should use the web or not (the LLM isn't good at this!)
+        let webScrape = false;
+        if (!recurse && shouldWebScrape(message, conversationContext, conversationId)) {
+            webScrape = true;
+            console.log('WebScrape mode engaged.');
+            const toolsApi = JSON.stringify(plugins.tools);
+            const useWebSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
+            conversationContext.chatMessages.push({ role: 'system', content: useWebSystemMessage, images: [] });
+        }
+
         // Add the user's message to the conversation context
         conversationContext.chatMessages.push({ role: actor, content: message, images: [] });
         conversationContext.chatMessages = pruneChatMessages(conversationContext.chatMessages);
         console.log('Context now has (after prune) ' + conversationContext.chatMessages.length + ' messsages.');
+        
+        // Send a POST request to the LLM, sending the message context
         const response = await axios.post(llmApiUrl, {
             model: model,
             messages: conversationContext.chatMessages,
-            options: {
-                "num_ctx": llmModelContextSize
-            },
+            num_ctx: llmModelContextSize,
             stream: false,
             keep_alive: "15m"
         });
@@ -329,7 +338,12 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         while (messages[messages.length - 1].content.startsWith('{')) {
             messages.splice(messages.length - 1, 1);
         }
+        if (webScrape) {
+            // Remove the function call system message also.
+            messages.splice(messages.length - 3, 1);
+        }
 
+        // FIXME: We need to decide earlier in the code if it's a hidden function call or not.
         // If at the end it is still a JSON message, hide that from the user.
         if (stringResponse.startsWith('{')) {
             // Still begins with a JSON.
@@ -356,11 +370,36 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
 function startNewConversationContext(conversationId: string) {
     let chatMessages: ChatMessage[] = [];
-    const toolsApi = JSON.stringify(plugins.tools);
-    const jsonSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
-    console.log(jsonSystemMessage);
-    chatMessages.push({ role: 'system', content: jsonSystemMessage, images: [] });
+
+    // Initial system message that always stays at the top of the message context.
+    const topSystemMessage = 'Today\'s date and time is: ' + new Date().toISOString() + '\n'
+    + 'If the user asks what today\'s date or time is, just tell them from memory. Greet the user warmly.';
+
+    console.log(topSystemMessage);
+    chatMessages.push({ role: 'system', content: topSystemMessage, images: [] });
     idToConversationContextMap[conversationId] = ({ chatMessages } as ConversationContext);
+}
+
+function shouldWebScrape(message: string, conversationContext: ConversationContext, conversationId: string): boolean {
+    let msg = message.toLocaleLowerCase();
+    // TODO: Support other languages, maybe by asking the LLM to
+    // translate the list of words and phrases before the check.
+    if (/search/g.test(msg)) return true;
+    if (/price/g.test(msg)) return true;
+    if (/market cap/g.test(msg)) return true;
+    if (/news/g.test(msg)) return true;
+    if (/recent/g.test(msg)) return true;
+    if (/up to date/g.test(msg)) return true;
+    if (/up-to-date/g.test(msg)) return true;
+    if (/today/g.test(msg)) return true;
+    if (/yesterday/g.test(msg)) return true;
+    if (/this week/g.test(msg)) return true;
+    if (/this month/g.test(msg)) return true;
+    if (/this year/g.test(msg)) return true;
+    if (/google it/g.test(msg)) return true;
+    if (/google for/g.test(msg)) return true;
+    if (/google that/g.test(msg)) return true;
+    return false;
 }
 
 async function invokeLlmFunction(objectMessage: any, conversationId: string): Promise<string> {
