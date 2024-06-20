@@ -340,7 +340,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         }
         if (webScrape) {
             // Remove the function call system message also.
-            messages.splice(messages.length - 3, 1);
+            messages.splice(messages.length - 2, 1);
         }
 
         // FIXME: We need to decide earlier in the code if it's a hidden function call or not.
@@ -389,6 +389,7 @@ function shouldWebScrape(message: string, conversationContext: ConversationConte
     if (/market cap/g.test(msg)) return true;
     if (/news/g.test(msg)) return true;
     if (/recent/g.test(msg)) return true;
+    if (/current/g.test(msg)) return true;
     if (/up to date/g.test(msg)) return true;
     if (/up-to-date/g.test(msg)) return true;
     if (/today/g.test(msg)) return true;
