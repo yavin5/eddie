@@ -319,7 +319,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         + `\\"value\\": \\"{\\"status\\": \\"OK\\", \\"message\\": ${functionResultJson}}"}"}`;
 
                     // Recursive call to queryLLM(), but the nested one returns early.
-                    console.log(`Saying this to LLM: ${functionResponseJson}`); // only part of this string gets sent!
+                    console.log(`Saying this to LLM: ${functionResponseJson}`);
                     stringResponse = await queryLLM('user', functionResponseJson, conversationId, true);
                 } else {
                     // FIXME: If it's JSON text (parsed without errors) but it isn't a
