@@ -283,6 +283,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 let matches: RegExpMatchArray | null;
                 // Check to see if it contained JSON text.
                 if (matches = stringResponse.match(/^[\s]*{[\s\n\r]*[\\]*["][\s]*action[\s]*[\\]*["][\s]*:.*/gm)) {
+                    console.log("JSON content detected.");
                     // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
                     //stringResponse = JSON.stringify(parse(matches[0]));
 
@@ -318,6 +319,8 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         let searchQuery = stringResponse.substring(0, index);
                         console.log('It was a python impl for webSearch with this searchQuery: ' + searchQuery);
                         stringResponse = `{ \"action\": \"function-call\", \"name\": \"webSearch\", \"arguments\": { \"searchQuery\": \"${searchQuery}\"}}`;
+                    } else {
+                        console.log("Don't know what content type is in the message.");
                     }
                 }
                 let objectMessage = JSON.parse(stringResponse);
@@ -507,7 +510,8 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
                     // INVOKE the LLM function!
                     const stringResult = await plugins[functionName](...funcArgs);
                     console.log(`Invoker received result: ${stringResult}`);
-                    if (linkUrl && stringResult) {
+                    if (linkUrl && stringResult
+                       && !(stringResult.includes(':404,') && stringResult.includes('\"error\"'))) {
                         sendMessage(conversationId, `🤖 ${linkUrl}`);
                     }
                     resolve(stringResult);
