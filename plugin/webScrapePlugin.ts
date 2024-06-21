@@ -94,8 +94,9 @@ class WebScrapePlugin {
         const requestHeaders: HeadersInit = new Headers();
         //requestHeaders.set('Accept', 'application/json');
 
-        // Sometimes the LLM is sending URLs that contain spaces.  :(
+        // Sometimes the LLM is sending URLs that contain spaces nor quotes.  :(
         let url2 = url.replace(/\S+/g, '');
+        url2 = url.replace(/"/g, '');
 
         // Don't bother making requests to example.com.
         if (url2.includes('example.com') || url2.includes('example2.com')) {
