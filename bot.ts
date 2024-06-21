@@ -196,7 +196,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
         // NOT a group message.
         if (!ignoredUsers.has(sender) && !ignoredUsers.has(senderUuid)) {
             // Handle any slash commands.
-            const handled = await handleSlashCommands(content, groupId);
+            const handled = await handleSlashCommands(content, senderUuid);
             if (handled) return;
 
             console.log(`Saying this to LLM: ` + content);
