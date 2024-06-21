@@ -304,7 +304,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         stringResponse = stringResponse.substring(index);
                         index = stringResponse.indexOf('\'');
                         if (index == -1) index = stringResponse.indexOf('\"');
-                        let url = stringResponse.substring(0, index);
+                        let url = stringResponse.substring(0, index - 1);
                         console.log('It was a python impl for httpGet with this url: ' + url);
                         stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
                     } else if (/python/gmi.test(stringResponse)
