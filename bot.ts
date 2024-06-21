@@ -167,7 +167,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
                 mention.uuid === botPhoneNumber);
             if (mention) {
                 // Handle any slash commands.
-                const handled = handleSlashCommands(content, groupId);
+                const handled = await handleSlashCommands(content, groupId);
                 if (handled) return;
 
                 console.log(`Saying this to LLM: ` + content);
