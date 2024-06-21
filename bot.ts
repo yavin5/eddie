@@ -295,9 +295,9 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     // Check it to see if it's python code implementing function calls (sigh!)
 
                     // Check for a httpGet python implementation.
-                    if (/python/gm.test(stringResponse)
-                     && (/http.*?[\r\n\s]*?.*get[\s]*\(/gm.test(stringResponse)
-                      || /get[\s]*?\(.*?[\r\n\s]*?.*http/gm.test(stringResponse))) {
+                    if (/python/gmi.test(stringResponse)
+                     && (/http.*?[\r\n\s]*?.*get[\s]*\(/gmi.test(stringResponse)
+                      || /get[\s]*?\(.*?[\r\n\s]*?.*http/gmi.test(stringResponse))) {
                         stringResponse = stringResponse.toLocaleLowerCase();
                         let index = stringResponse.indexOf('http://');
                         if (index == -1) index = stringResponse.indexOf('https://');
@@ -307,9 +307,9 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         let url = stringResponse.substring(0, index);
                         console.log('It was a python impl for httpGet with this url: ' + url);
                         stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
-                    } else if (/python/gm.test(stringResponse)
-                        && (/web.*?[\r\n\s]*?.*search[\s]*\(/gm.test(stringResponse)
-                        || /search.*?[\r\n\s]*?.*web[\s]*\(/gm.test(stringResponse))) {
+                    } else if (/python/gmi.test(stringResponse)
+                        && (/web.*?[\r\n\s]*?.*search[\s]*\(/gmi.test(stringResponse)
+                        || /search.*?[\r\n\s]*?.*web[\s]*\(/gmi.test(stringResponse))) {
                         // webSearch python implementation.
                         stringResponse = stringResponse.toLocaleLowerCase();
                         let index = stringResponse.indexOf('(\'');
