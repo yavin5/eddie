@@ -205,7 +205,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
  * @param {string} conversationId The ID key of the conversation.
  * @return {boolean} True if a slash command was handled, false otherwise.
  */
-async function handleSlashCommands(message: string, conversationId: string): boolean {
+async function handleSlashCommands(message: string, conversationId: string): Promise<boolean> {
     let msg = message;
     if (msg.startsWith(botName)) msg = msg.substring(botName.length);
     if (msg.startsWith('@' + botName)) msg = msg.substring(botName.length + 1);
