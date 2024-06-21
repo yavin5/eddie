@@ -350,12 +350,15 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         || /search.*?[\r\n\s]*?.*web[\s]*\(/gmi.test(stringResponse))) {
                         // webSearch python implementation.
                         stringResponse = stringResponse.toLocaleLowerCase();
-                        let index = stringResponse.indexOf('(\'');
-                        if (index == -1) index = stringResponse.indexOf('(\"');
+                        let index = stringResponse.indexOf('\'');
+                        if (index == -1) index = stringResponse.indexOf('\"');
                         stringResponse = stringResponse.substring(index);
-                        index = stringResponse.indexOf('\')');
-                        if (index == -1) index = stringResponse.indexOf('\")');
+                        index = stringResponse.indexOf('\'');
+                        if (index == -1) index = stringResponse.indexOf('\"');
                         let searchQuery = stringResponse.substring(0, index);
+                        if (searchQuery.indexOf('\"')) {
+                            searchQuery = searchQuery.substring(searchQuery.indexOf('\"'));
+                        }
                         console.log('It was a python impl for webSearch with this searchQuery: ' + searchQuery);
                         stringResponse = `{ "action": "function-call", "name": "webSearch", "arguments": { "searchQuery": "${searchQuery}"}}`;
                     } else {
