@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { exec } from 'child_process';
 import readline from 'readline';
 import path from 'path';
+import { send } from 'process';
 
 dotenv.config();
 
@@ -165,6 +166,10 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
                 mention.number === botPhoneNumber ||
                 mention.uuid === botPhoneNumber);
             if (mention) {
+                // Handle any slash commands.
+                const handled = handleSlashCommands(content, groupId);
+                if (handled) return;
+
                 console.log(`Saying this to LLM: ` + content);
                 const response = await queryLLM('user', content, groupId, false);
                 console.log(`Response from LLM : ` + response);
@@ -192,6 +197,30 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
             sendMessage(sender, response);
         }
     }
+}
+
+/**
+ * Handle commands like "/clear" that start with a slash.
+ * @param {string} content The message from the user.
+ * @param {string} conversationId The ID key of the conversation.
+ * @return {boolean} True if a slash command was handled, false otherwise.
+ */
+async function handleSlashCommands(message: string, conversationId: string): boolean {
+    let msg = message;
+    if (msg.startsWith(botName)) msg = msg.substring(botName.length);
+    if (msg.startsWith('@' + botName)) msg = msg.substring(botName.length + 1);
+    msg = msg.trim();
+    if (msg.startsWith('/clear')) {
+        await sendMessage(conversationId, '✨ My conversation context is now cleared.');
+        startNewConversationContext(conversationId);
+        return true;
+    } else if (msg.startsWith('/help')) {
+        await sendMessage(conversationId, 'Commands:\n'
+            + '✨ /clear : Clears my conversation memory\n'
+            + '🤷‍♂️ /help  : Show the list of commands');
+        return true;
+    }
+    return false;
 }
 
 /**
