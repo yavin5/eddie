@@ -306,10 +306,11 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         if (index == -1) index = stringResponse.indexOf('\"');
                         let url = stringResponse.substring(0, index);
                         console.log('It was a python impl for httpGet with this url: ' + url);
-                        stringResponse = `{ \"action\": \"function-call\", \"name\": \"httpGet\", \"arguments\": { \"url\": \"${url}\"}}`;
+                        stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
                     } else if (/python/gm.test(stringResponse)
                         && (/http.*?[\r\n\s]*?.*search[\s]*\(/gm.test(stringResponse)
                         || /search[\s]*?\(.*?[\r\n\s]*?.*http/gm.test(stringResponse))) {
+                        // webSearch python implementation.
                         stringResponse = stringResponse.toLocaleLowerCase();
                         let index = stringResponse.indexOf('(\'');
                         if (index == -1) index = stringResponse.indexOf('(\"');
@@ -318,7 +319,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         if (index == -1) index = stringResponse.indexOf('\")');
                         let searchQuery = stringResponse.substring(0, index);
                         console.log('It was a python impl for webSearch with this searchQuery: ' + searchQuery);
-                        stringResponse = `{ \"action\": \"function-call\", \"name\": \"webSearch\", \"arguments\": { \"searchQuery\": \"${searchQuery}\"}}`;
+                        stringResponse = `{ "action": "function-call", "name": "webSearch", "arguments": { "searchQuery": "${searchQuery}"}}`;
                     } else {
                         console.log("Don't know what content type is in the message.");
                     }
