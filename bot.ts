@@ -281,6 +281,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 stringResponse = stringResponse.replace(/\\\\+/g, '');
                 let matches: RegExpMatchArray | null;
+                // Check to see if it contained JSON text.
                 if (matches = stringResponse.match(/^[\s]*{[\s\n\r]*[\\]*["][\s]*action[\s]*[\\]*["][\s]*:.*/gm)) {
                     // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
                     //stringResponse = JSON.stringify(parse(matches[0]));
@@ -288,6 +289,36 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     // Clip out from the first '{' to the last '}'.
                     stringResponse = stringResponse.substring(stringResponse.indexOf('{'),stringResponse.lastIndexOf('}') + 1);
                     console.log('sanitized JSON: ' + stringResponse);
+                } else {
+                    // It didn't contain JSON.. maybe python?
+                    // Check it to see if it's python code implementing function calls (sigh!)
+
+                    // Check for a httpGet python implementation.
+                    if (/python/gm.test(stringResponse)
+                     && (/http.*?[\r\n\s]*?.*get[\s]*\(/gm.test(stringResponse)
+                      || /get[\s]*?\(.*?[\r\n\s]*?.*http/gm.test(stringResponse))) {
+                        stringResponse = stringResponse.toLocaleLowerCase();
+                        let index = stringResponse.indexOf('http://');
+                        if (index == -1) index = stringResponse.indexOf('https://');
+                        stringResponse = stringResponse.substring(index);
+                        index = stringResponse.indexOf('\'');
+                        if (index == -1) index = stringResponse.indexOf('\"');
+                        let url = stringResponse.substring(0, index);
+                        console.log('It was a python impl for httpGet with this url: ' + url);
+                        stringResponse = `{ \"action\": \"function-call\", \"name\": \"httpGet\", \"arguments\": { \"url\": \"${url}\"}}`;
+                    } else if (/python/gm.test(stringResponse)
+                        && (/http.*?[\r\n\s]*?.*search[\s]*\(/gm.test(stringResponse)
+                        || /search[\s]*?\(.*?[\r\n\s]*?.*http/gm.test(stringResponse))) {
+                        stringResponse = stringResponse.toLocaleLowerCase();
+                        let index = stringResponse.indexOf('(\'');
+                        if (index == -1) index = stringResponse.indexOf('(\"');
+                        stringResponse = stringResponse.substring(index);
+                        index = stringResponse.indexOf('\')');
+                        if (index == -1) index = stringResponse.indexOf('\")');
+                        let searchQuery = stringResponse.substring(0, index);
+                        console.log('It was a python impl for webSearch with this searchQuery: ' + searchQuery);
+                        stringResponse = `{ \"action\": \"function-call\", \"name\": \"webSearch\", \"arguments\": { \"searchQuery\": \"${searchQuery}\"}}`;
+                    }
                 }
                 let objectMessage = JSON.parse(stringResponse);
                 if (objectMessage.action) {
