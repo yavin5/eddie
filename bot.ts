@@ -437,6 +437,7 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
                 console.log('Invoker invoking LLM function.');
                 const funcArgs: any[] = [];
                 const oArguments: object = objectMessage.arguments;
+                let linkUrl = '';
                 for (let argName of Object.getOwnPropertyNames(oArguments)) {
                     const argumentName = argName.toString();
                     console.log(`Invoker argumentName: ${argumentName}`);
@@ -465,7 +466,7 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
                             // TODO: Make this toggleable via configuration.
                             if (argumentStringValue.toLocaleLowerCase().startsWith('http://') ||
                                 argumentStringValue.toLocaleLowerCase().startsWith('https://')) {
-                                sendMessage(conversationId, `🤖 ${argumentStringValue}`);
+                                linkUrl = argumentStringValue;
                             }
                         }
                     }
@@ -475,6 +476,9 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
                     // INVOKE the LLM function!
                     const stringResult = await plugins[functionName](...funcArgs);
                     console.log(`Invoker received result: ${stringResult}`);
+                    if (linkUrl && stringResult) {
+                        sendMessage(conversationId, `🤖 ${linkUrl}`);
+                    }
                     resolve(stringResult);
                 } catch (error) {
                     console.log(`Invoker: ${error}`);
