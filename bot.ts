@@ -183,6 +183,10 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
         // or @BotName (a plain text mention) is in the message somewhere.
         if (content.toLowerCase().startsWith(botName.toLowerCase()) ||
             content.toLowerCase().includes('@' + botName.toLowerCase())) {
+            // Handle any slash commands.
+            const handled = await handleSlashCommands(content, groupId);
+            if (handled) return;
+
             console.log(`Saying this to LLM: ` + content);
             const response = await queryLLM('user', content, groupId, false);
             console.log(`Response from LLM : ` + response);
@@ -191,6 +195,10 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
     } else {
         // NOT a group message.
         if (!ignoredUsers.has(sender) && !ignoredUsers.has(senderUuid)) {
+            // Handle any slash commands.
+            const handled = await handleSlashCommands(content, groupId);
+            if (handled) return;
+
             console.log(`Saying this to LLM: ` + content);
             const response = await queryLLM('user', content, senderUuid, false);
             console.log(`Response from LLM : ` + response);
