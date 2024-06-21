@@ -255,15 +255,20 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         console.log('Context now has (after prune) ' + conversationContext.chatMessages.length + ' messsages.');
         
         // Send a POST request to the LLM, sending the message context
-        const response = await axios.post(llmApiUrl, {
-            model: model,
-            messages: conversationContext.chatMessages,
-            num_ctx: llmModelContextSize,
-            stream: false,
-            keep_alive: "15m"
-        });
-        let stringResponse: string = response.data.message.content;
-        console.log(`stringResponse: ${stringResponse}`);
+        // In case LLM responds with empty string (sometimes), we loop, retrying a little.
+        let response = null;
+        let stringResponse = '';
+        for (let retryCount = 0; !response && retryCount < 4; retryCount++) {
+            response = await axios.post(llmApiUrl, {
+                model: model,
+                messages: conversationContext.chatMessages,
+                num_ctx: llmModelContextSize,
+                stream: false,
+                keep_alive: "15m"
+            });
+            let stringResponse: string = response.data.message.content;
+        }
+        console.log(`LLM response: ${stringResponse}`);
 
         // In the case of a recurse, it's a function call cycle, so return here early.
         if (recurse) return stringResponse;
