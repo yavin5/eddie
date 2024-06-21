@@ -266,7 +266,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 stream: false,
                 keep_alive: "15m"
             });
-            let stringResponse: string = response.data.message.content;
+            stringResponse = response.data.message.content;
         }
         console.log(`LLM response: ${stringResponse}`);
 
