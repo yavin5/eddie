@@ -308,8 +308,8 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         console.log('It was a python impl for httpGet with this url: ' + url);
                         stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
                     } else if (/python/gm.test(stringResponse)
-                        && (/http.*?[\r\n\s]*?.*search[\s]*\(/gm.test(stringResponse)
-                        || /search[\s]*?\(.*?[\r\n\s]*?.*http/gm.test(stringResponse))) {
+                        && (/web.*?[\r\n\s]*?.*search[\s]*\(/gm.test(stringResponse)
+                        || /search.*?[\r\n\s]*?.*web[\s]*\(/gm.test(stringResponse))) {
                         // webSearch python implementation.
                         stringResponse = stringResponse.toLocaleLowerCase();
                         let index = stringResponse.indexOf('(\'');
