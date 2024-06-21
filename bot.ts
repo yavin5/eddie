@@ -258,7 +258,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         // In case LLM responds with empty string (sometimes), we loop, retrying a little.
         let response = null;
         let stringResponse = '';
-        for (let retryCount = 0; !response && retryCount < 4; retryCount++) {
+        for (let retryCount = 0; !stringResponse && retryCount < 4; retryCount++) {
             response = await axios.post(llmApiUrl, {
                 model: model,
                 messages: conversationContext.chatMessages,
