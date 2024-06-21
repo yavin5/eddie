@@ -309,6 +309,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
                     } else if (/python/gmi.test(stringResponse)
                         && (/web.*?[\r\n\s]*?.*search[\s]*\(/gmi.test(stringResponse)
+                        || /google.*?[\r\n\s]*?.*search[\s]*\(/gmi.test(stringResponse)
                         || /search.*?[\r\n\s]*?.*web[\s]*\(/gmi.test(stringResponse))) {
                         // webSearch python implementation.
                         stringResponse = stringResponse.toLocaleLowerCase();
