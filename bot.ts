@@ -377,11 +377,11 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         || /google.*?[\r\n\s]*?.*search[\s]*\(/gmi.test(stringResponse)
                         || /search.*?[\r\n\s]*?.*web[\s]*\(/gmi.test(stringResponse))) {
                         stringResponse = stringResponse.toLocaleLowerCase();
-                        let index = stringResponse.indexOf('\'');
-                        if (index == -1) index = stringResponse.indexOf('\"');
+                        let index = stringResponse.indexOf('\"');
+                        if (index == -1) index = stringResponse.indexOf('\'');
                         stringResponse = stringResponse.substring(index);
-                        index = stringResponse.indexOf('\'');
-                        if (index == -1) index = stringResponse.indexOf('\"');
+                        index = stringResponse.indexOf('\"');
+                        if (index == -1) index = stringResponse.indexOf('\'');
                         let searchQuery = stringResponse.substring(0, index);
                         if (searchQuery.indexOf('\"')) {
                             searchQuery = searchQuery.substring(searchQuery.indexOf('\"'));
