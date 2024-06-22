@@ -335,7 +335,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     if (/<｜tool▁calls▁begin｜>/gmi.test(stringResponse)) {
                         // This block may contain N number of <｜tool▁call▁begin｜>
                         // tags, each one being a tool call.  For now, do the 1st one!
-                        stringResponse = stringResponse.toLocaleLowerCase();
+                        stringResponse = stringResponse.toLowerCase();
                         // FIXME: Don't hard code function names or params.
                         if (/webSearch/gmi.test(stringResponse)) {
                             let index = stringResponse.indexOf('"searchQuery": "') + 16;
