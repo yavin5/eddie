@@ -339,14 +339,14 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         // FIXME: Don't hard code function names or params.
                         if (/webSearch/gmi.test(stringResponse)) {
                             let index = stringResponse.indexOf('"searchQuery": "') + 16;
-                            if (index == 16) index = stringResponse.indexOf('"searchQuery":"') + 15;
+                            if (index === undefined) index = stringResponse.indexOf('"searchQuery":"') + 15;
                             stringResponse = stringResponse.substring(index);
                             let searchQuery = stringResponse.substring(0, stringResponse.indexOf('"'));
                             console.log('It was a tool call tag block for webSearch with this searchQuery: ' + searchQuery);
                             stringResponse = `{ "action": "function-call", "name": "webSearch", "arguments": { "searchQuery": "${searchQuery}"}}`;
                         } else if (/httpGet/gmi.test(stringResponse)) {
                             let index = stringResponse.indexOf('"url": "') + 8;
-                            if (index == 8) index = stringResponse.indexOf('"url":"') + 7;
+                            if (index === undefined) index = stringResponse.indexOf('"url":"') + 7;
                             stringResponse = stringResponse.substring(index);
                             let url = stringResponse.substring(0, stringResponse.indexOf('"'));
                             console.log('It was a tool call tag block for httpGet with this url: ' + url);
