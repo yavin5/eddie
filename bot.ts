@@ -321,11 +321,11 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 // Check to see if it contained JSON text.
                 if (matches = stringResponse.match(/^[\s]*{[\s\n\r]*[\\]*["][\s]*action[\s]*[\\]*["][\s]*:.*/gm)) {
                     console.log("JSON content detected.");
-                    // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
-                    //stringResponse = JSON.stringify(parse(matches[0]));
 
                     // Clip out from the first '{' to the last '}'.
                     stringResponse = stringResponse.substring(stringResponse.indexOf('{'),stringResponse.lastIndexOf('}') + 1);
+                    // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
+                    stringResponse = JSON.stringify(parse(stringResponse));
                     console.log('sanitized JSON: ' + stringResponse);
                 } else {
                     // It didn't contain JSON.. maybe contains markup tool tags or python?
