@@ -42,7 +42,7 @@ class WebScrapePlugin {
         // freshness = pw        : Return results that are fresh to within 1 week.
         // extra_snippets = true : Return some text excerpts from the result page.
         // text_decorations = 0  : We don't want a highlighted colored text response.
-        let url = 'https://api.search.brave.com/res/v1/web/search?offset=1&count=18&result_filter=news,faq,web&freshness=pw&extra_snippets=true&text_decorations=0&q=' + searchQuery;
+        let url = 'https://api.search.brave.com/res/v1/web/search?offset=1&count=18&freshness=pw&extra_snippets=true&text_decorations=0&q=' + searchQuery;
 
         try {
             let jsonText: string = '';
@@ -86,6 +86,17 @@ class WebScrapePlugin {
             plainText = textLines.join('\n');
             plainText = plainText.replace(/\n\n\n(\n)+/g, '\n---\n');
             plainText = plainText.replace(/\n\n/g, '\n');
+
+            const query = searchQuery.toLocaleLowerCase();
+            // These shouldn't be hard-coded here except Brave Search returns bad results otherwise.
+            if (query.includes('crypto')    || query.includes('coin')
+             || query.includes('bitcoin')   || query.includes('token')
+             || query.includes(' eth')      || query.includes('ethereum')
+             || query.includes('blockchain')|| query.includes('blockdag')) {
+                plainText = 'title : Prices, market cap, cryptocurrency stats, up to date!\nurl : https://coinmarketcap.com\n---\n'
+                    + plainText;
+             }
+
             //console.log('\n\n\n\nwebSearch returning: \n\n' + plainText);
 
             return plainText;
