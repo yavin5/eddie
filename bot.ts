@@ -328,9 +328,29 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     stringResponse = stringResponse.substring(stringResponse.indexOf('{'),stringResponse.lastIndexOf('}') + 1);
                     console.log('sanitized JSON: ' + stringResponse);
                 } else {
-                    // It didn't contain JSON.. maybe python?
-                    // Check it to see if it's python code implementing function calls (sigh!)
+                    // It didn't contain JSON.. maybe contains markup tool tags or python?
 
+                    // See if it's a <｜tool▁calls▁begin｜> block
+                    // For model: deepseek-coder-v2
+                    if (/<｜tool▁calls▁begin｜>/gmi.test(stringResponse)) {
+                        // This block may contain N number of <｜tool▁call▁begin｜>
+                        // tags, each one being a tool call.  For now, do the 1st one!
+                        stringResponse = stringResponse.toLocaleLowerCase();
+                        // FIXME: Don't hard code function names or params.
+                        if (/webSearch/gmi.test(stringResponse)) {
+                            stringResponse = stringResponse.substring(stringResponse.indexOf('"searchQuery": "') + 16);
+                            let searchQuery = stringResponse.substring(0, stringResponse.indexOf('"'));
+                            console.log('It was a tool call tag block for webSearch with this searchQuery: ' + searchQuery);
+                            stringResponse = `{ "action": "function-call", "name": "webSearch", "arguments": { "searchQuery": "${searchQuery}"}}`;
+                        } else if (/httpGet/gmi.test(stringResponse)) {
+                            stringResponse = stringResponse.substring(stringResponse.indexOf('"url": "') + 8);
+                            let url = stringResponse.substring(0, stringResponse.indexOf('"'));
+                            console.log('It was a tool call tag block for httpGet with this url: ' + url);
+                            stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
+                        }
+                    } else 
+                    // Check it to see if it's python code implementing function calls (sigh!)
+                    // For model: dolphin-2.9.2-qwen2-7b
                     // Check for a httpGet python implementation.
                     if (/python/gmi.test(stringResponse)
                      && (/http.*?[\r\n\s]*?.*get[\s]*\(/gmi.test(stringResponse)
@@ -344,11 +364,14 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         let url = stringResponse.substring(0, index);
                         console.log('It was a python impl for httpGet with this url: ' + url);
                         stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
-                    } else if (/python/gmi.test(stringResponse)
+                    } else
+                    // Check it to see if it's python code implementing function calls (sigh!)
+                    // For model: dolphin-2.9.2-qwen2-7b
+                    // Check for a webSearch python implementation.
+                    if (/python/gmi.test(stringResponse)
                         && (/search[\s]*\(/gmi.test(stringResponse)
                         || /google.*?[\r\n\s]*?.*search[\s]*\(/gmi.test(stringResponse)
                         || /search.*?[\r\n\s]*?.*web[\s]*\(/gmi.test(stringResponse))) {
-                        // webSearch python implementation.
                         stringResponse = stringResponse.toLocaleLowerCase();
                         let index = stringResponse.indexOf('\'');
                         if (index == -1) index = stringResponse.indexOf('\"');
@@ -481,6 +504,7 @@ function shouldWebScrape(message: string, conversationContext: ConversationConte
     if (/up to date/g.test(msg)) return true;
     if (/up-to-date/g.test(msg)) return true;
     if (/soon/g.test(msg)) return true;
+    if (/upcoming/g.test(msg)) return true;
     if (/today/g.test(msg)) return true;
     if (/yesterday/g.test(msg)) return true;
     if (/this week/g.test(msg)) return true;
