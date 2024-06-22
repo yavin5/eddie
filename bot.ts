@@ -341,7 +341,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         stringResponse = stringResponse.substring(index);
                         index = stringResponse.indexOf('\'');
                         if (index == -1) index = stringResponse.indexOf('\"');
-                        let url = stringResponse.substring(0, index - 1);
+                        let url = stringResponse.substring(0, index);
                         console.log('It was a python impl for httpGet with this url: ' + url);
                         stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
                     } else if (/python/gmi.test(stringResponse)
@@ -480,6 +480,7 @@ function shouldWebScrape(message: string, conversationContext: ConversationConte
     if (/current/g.test(msg)) return true;
     if (/up to date/g.test(msg)) return true;
     if (/up-to-date/g.test(msg)) return true;
+    if (/soon/g.test(msg)) return true;
     if (/today/g.test(msg)) return true;
     if (/yesterday/g.test(msg)) return true;
     if (/this week/g.test(msg)) return true;
@@ -527,10 +528,11 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
                         argumentStringValue.startsWith('[') &&
                         argumentStringValue.endsWith(']')) {
                         const stringArray: string[] = [];
-                        for (const stringValue in argumentValue) {
-                            stringArray.push(stringValue);
+                        for (const stringValue of argumentValue) {
+                            // FIXME: For now all the values of a string array go into the
+                            // function arguments as separate args (ultimately wrong).
+                            funcArgs.push(stringValue);
                         }
-                        funcArgs.push(stringArray);
                     } else {
                         // Regular string arguments are supported.
                         if (argumentStringValue.length > 0) {
