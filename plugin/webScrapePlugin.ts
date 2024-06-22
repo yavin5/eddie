@@ -42,7 +42,7 @@ class WebScrapePlugin {
         // freshness = pw        : Return results that are fresh to within 1 week.
         // extra_snippets = true : Return some text excerpts from the result page.
         // text_decorations = 0  : We don't want a highlighted colored text response.
-        let url = 'https://api.search.brave.com/res/v1/web/search?offset=1&count=18&freshness=pw&extra_snippets=true&text_decorations=0&q=' + searchQuery;
+        let url = 'https://api.search.brave.com/res/v1/web/search?count=18&freshness=pw&extra_snippets=true&text_decorations=0&q=' + searchQuery;
 
         try {
             let jsonText: string = '';
