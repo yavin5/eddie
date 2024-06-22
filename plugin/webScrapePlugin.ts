@@ -1,5 +1,6 @@
 import { jsonToPlainText, Options } from "json-to-plain-text";
 import { JSDOM } from 'jsdom';
+import { json } from "stream/consumers";
 //import fetch from 'node-fetch';
 // TODO: Probably should import and use node-fetch:
 // https://github.com/node-fetch/node-fetch
@@ -35,11 +36,11 @@ class WebScrapePlugin {
         }
 
         // Currently implemented as a search.brave.com searcher.
-        // count = 6 : This is supposed to return 6 results. We need small output to LLM!
-        // freshness = pw : Return results that are fresh to within 1 week.
+        // count = 12            : This is supposed to return 6 results. We need small output to LLM!
+        // freshness = pw        : Return results that are fresh to within 1 week.
         // extra_snippets = true : Return some text excerpts from the result page.
-        // text_decorations = 0 : We don't want a highlighted colored text response.
-        let url = 'https://api.search.brave.com/res/v1/web/search?count=6&freshness=pw&extra_snippets=true&text_decorations=0&q=' + searchQuery;
+        // text_decorations = 0  : We don't want a highlighted colored text response.
+        let url = 'https://api.search.brave.com/res/v1/web/search?count=12&freshness=pw&extra_snippets=true&text_decorations=0&q=' + searchQuery;
 
         try {
             let jsonText: string = '';
@@ -66,6 +67,11 @@ class WebScrapePlugin {
             for (const line of textLines) {
                 if (!(line.startsWith('url : ') || line.startsWith('title : ') || line.startsWith('description : '))) {
                    textLines[arrayIndex] = '';
+                }
+                // Some web sites are too fictional.  We need factual data.
+                if (line.includes('forbes.com') || line.includes('usatoday.com')
+                 || line.includes('yahoofinance.com') || line.includes('bankrate.com')) {
+                    textLines[arrayIndex] = '';
                 }
                 arrayIndex++;
             }
@@ -218,6 +224,7 @@ class WebScrapePlugin {
     * @returns {string} the plain text representation of the JSON.
     */
     scrapeJsonToPlainText(jsonText: string): string {
+        console.log(jsonText);
         const options: Options = {
             color: false,                  // Whether to apply colors to the output or not
             spacing: false,                 // Whether to include spacing before colons or not
