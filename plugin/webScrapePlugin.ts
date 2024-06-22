@@ -36,11 +36,11 @@ class WebScrapePlugin {
         }
 
         // Currently implemented as a search.brave.com searcher.
-        // count = 12            : This is supposed to return 6 results. We need small output to LLM!
+        // count = 18            : This is supposed to return 6 results. We need small output to LLM!
         // freshness = pw        : Return results that are fresh to within 1 week.
         // extra_snippets = true : Return some text excerpts from the result page.
         // text_decorations = 0  : We don't want a highlighted colored text response.
-        let url = 'https://api.search.brave.com/res/v1/web/search?count=12&freshness=pw&extra_snippets=true&text_decorations=0&q=' + searchQuery;
+        let url = 'https://api.search.brave.com/res/v1/web/search?count=18&freshness=pw&extra_snippets=true&text_decorations=0&q=' + searchQuery;
 
         try {
             let jsonText: string = '';
@@ -72,6 +72,12 @@ class WebScrapePlugin {
                 if (line.includes('forbes.com') || line.includes('usatoday.com')
                  || line.includes('yahoofinance.com') || line.includes('bankrate.com')) {
                     textLines[arrayIndex] = '';
+                    for (let index = arrayIndex; index >= 0; index--) {
+                        if (textLines[index].startsWith('description : ')) {
+                            textLines[index] = '';
+                            break;
+                        }
+                    }
                 }
                 arrayIndex++;
             }
@@ -224,7 +230,6 @@ class WebScrapePlugin {
     * @returns {string} the plain text representation of the JSON.
     */
     scrapeJsonToPlainText(jsonText: string): string {
-        console.log(jsonText);
         const options: Options = {
             color: false,                  // Whether to apply colors to the output or not
             spacing: false,                 // Whether to include spacing before colons or not
