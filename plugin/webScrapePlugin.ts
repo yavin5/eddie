@@ -38,11 +38,11 @@ class WebScrapePlugin {
         // Currently implemented as a search.brave.com searcher.
         // offset = 1            : The zero based offset that indicates number of results per page to skip before returning results.
         // count = 18            : This is supposed to return 6 results. We need small output to LLM!
-        // result_filter = 'news,faq,web' : A comma delimited string of result types to include in the response.
+        // result_filter = 'discussions,faq,infobox,news,query,web' : A comma delimited string of result types to include in the response.
         // freshness = pm        : Return results that are fresh to within 1 month.
         // extra_snippets = true : Return some text excerpts from the result page.
         // text_decorations = 0  : We don't want a highlighted colored text response.
-        let url = 'https://api.search.brave.com/res/v1/web/search?count=18&freshness=pm&extra_snippets=true&text_decorations=0&q=' + searchQuery;
+        let url = 'https://api.search.brave.com/res/v1/web/search?count=18&result_filter=discussions,faq,infobox,news,query,web&freshness=pm&extra_snippets=true&text_decorations=0&q=' + searchQuery;
 
         try {
             let jsonText: string = '';
@@ -75,7 +75,8 @@ class WebScrapePlugin {
                  || line.includes('yahoofinance.com') || line.includes('finance.yahoo.com') 
                  || line.includes('bankrate.com') || line.includes('coingape.com')
                  || line.includes('cryptonews.com') || line.includes('zebpay.com')
-                 || line.includes('ndtv.com') || line.includes('indiatimes.com')) {
+                 || line.includes('ndtv.com') || line.includes('indiatimes.com')
+                 || line.includes('democracynow.org') || line.includes('nationalpost.com')) {
                     textLines[arrayIndex] = '';
                     for (let index = arrayIndex; index >= 0; index--) {
                         if (textLines[index].startsWith('title : ')) {
@@ -85,6 +86,9 @@ class WebScrapePlugin {
                             }
                             if (textLines[index + 2] && textLines[index + 2].startsWith('description : ')) {
                                 textLines[index + 2] = '';
+                            }
+                            if (textLines[index + 3] && textLines[index + 3].startsWith('description : ')) {
+                                textLines[index + 3] = '';
                             }
                             break;
                         }
