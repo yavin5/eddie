@@ -417,8 +417,12 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     
                     // Wrap the result in a function-response JSON messsage to send back to the LLM.
                     let functionResultJson = JSON.stringify(functionResult);
+                    // Peel off single quotes that JSON.stringify() added.
+                    if (functionResultJson.length > 2) {
+                        functionResultJson = functionResultJson.substring(1, functionResultJson.length - 1);
+                    }
                     let functionResponseJson: string = `{"role":"user","content":"{\\"from\\": \\"function-response\\", `
-                        + `\\"value\\": \\"{\\"status\\": \\"OK\\", \\"message\\": ${functionResultJson}}"}"}`;
+                        + `\\"value\\": \\"{\\"status\\": \\"OK\\", \\"message\\": \\"${functionResultJson}\\"}"}"}`;
 
                     // Recursive call to queryLLM(), but the nested one returns early.
                     console.log(`Saying this to LLM: ${functionResponseJson}`);
