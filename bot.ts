@@ -338,11 +338,11 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         stringResponse = stringResponse.toLowerCase();
                         // FIXME: Don't hard code function names or params.
                         if (/<｜tool▁call▁begin｜>function<｜tool▁sep｜>(webSearch|web_search|searchWeb|search_web)$/gmi.test(stringResponse)) {
-                            let searchQuery = Array.from(stringResponse.matchAll(/{\s*?(["']+)(searchQuery|search_query)\1[:]+[\s\r\n]+\1([^\"\']+)\1/gmi), m => m[3]);
+                            let searchQuery = Array.from(stringResponse.matchAll(/{\s*?(["']+)(searchQuery|search_query)\1[:]+[\s\r\n]*\1([^\"\']+)\1/gmi), m => m[3]);
                             console.log('It was a tool call tag block for webSearch with this searchQuery: ' + searchQuery);
                             stringResponse = `{ "action": "function-call", "name": "webSearch", "arguments": { "searchQuery": "${searchQuery}"}}`;
                         } else if (/<｜tool▁call▁begin｜>function<｜tool▁sep｜>(httpGet|http_get|getHttp|get_http)$/gmi.test(stringResponse)) {
-                            let url = Array.from(stringResponse.matchAll(/{\s*?(["']+)url\1[:]+[\s\r\n]+\1([^\"\']+)\1/gmi), m => m[2]);
+                            let url = Array.from(stringResponse.matchAll(/{\s*?(["']+)url\1[:]+[\s\r\n]*\1([^\"\']+)\1/gmi), m => m[2]);
                             console.log('It was a tool call tag block for httpGet with this url: ' + url);
                             stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
                         }
