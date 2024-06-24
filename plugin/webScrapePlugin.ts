@@ -66,11 +66,14 @@ class WebScrapePlugin {
             // Scrape out url, title, description fields.
             let textLines: string[] = plainText.split('\n');
             let arrayIndex = 0;
-            for (const line of textLines) {
+            for (let line of textLines) {
+                console.log("LINE: " + line);
                 if (!(line.startsWith('url : ') || line.startsWith('title : ') || line.startsWith('description : '))) {
                    textLines[arrayIndex] = '';
+                   console.log("    line removed.");
                 }
                 // Some web sites are too fictional.  We need factual data.
+                line = line.toLowerCase();
                 if (line.includes('forbes.com') || line.includes('usatoday.com')
                  || line.includes('yahoofinance.com') || line.includes('finance.yahoo.com') 
                  || line.includes('bankrate.com') || line.includes('coingape.com')
@@ -81,6 +84,7 @@ class WebScrapePlugin {
                     for (let index = arrayIndex; index >= 0; index--) {
                         if (textLines[index].startsWith('title : ')) {
                             textLines[index] = '';
+                            console.log("    line removed.");
                             if (textLines[index + 1] && textLines[index + 1].startsWith('description : ')) {
                                 textLines[index + 1] = '';
                             }
