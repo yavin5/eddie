@@ -464,13 +464,13 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
             stringResponse = '😳 Error, sorry. (581)';
         } else {
             // It doesn't begin with a JSON.
-            stringResponse = stringResponse.replace(/([`\\])/g,'\\$1');
-            // BASH-escape single quote correctly.
-            stringResponse = stringResponse.replace(/(['])/g,'\'\\\'\'');
-
             // Add the LLM's response to the conversation context
             conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
             console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
+
+            stringResponse = stringResponse.replace(/([`\\])/g,'\\$1');
+            // BASH-escape single quote correctly.
+            stringResponse = stringResponse.replace(/(['])/g,'\'\\\'\'');
         }
 
         //console.log(response); // Uncomment this to see the HTTP response.
