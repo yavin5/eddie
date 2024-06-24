@@ -78,8 +78,14 @@ class WebScrapePlugin {
                  || line.includes('ndtv.com') || line.includes('indiatimes.com')) {
                     textLines[arrayIndex] = '';
                     for (let index = arrayIndex; index >= 0; index--) {
-                        if (textLines[index].startsWith('description : ')) {
+                        if (textLines[index].startsWith('title : ')) {
                             textLines[index] = '';
+                            if (textLines[index + 1] && textLines[index + 1].startsWith('description : ')) {
+                                textLines[index + 1] = '';
+                            }
+                            if (textLines[index + 2] && textLines[index + 2].startsWith('description : ')) {
+                                textLines[index + 2] = '';
+                            }
                             break;
                         }
                     }
