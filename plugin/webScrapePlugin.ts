@@ -143,6 +143,9 @@ class WebScrapePlugin {
         if (url2.includes('example.com') || url2.includes('example2.com')) {
             return 'The domain example.com is not a real web site. Try a different site.';
         }
+        if (url2.includes('coinmarketcap.com')) {
+            return 'This domain does not allow you to perform HTTP GETs. Try a different site.';
+        }
         // Disallow repeated useless web interrogation that the LLM tends to do.
         if (url2.toLowerCase().includes('real-time data')
          || url2.toLowerCase().includes('coronavirus')
