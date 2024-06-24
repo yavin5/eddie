@@ -337,24 +337,18 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                         // tags, each one being a tool call.  For now, do the 1st one!
                         stringResponse = stringResponse.toLowerCase();
                         // FIXME: Don't hard code function names or params.
-                        if (/webSearch/gmi.test(stringResponse)) {
-                            let index = stringResponse.indexOf('"searchQuery": "') + 16;
-                            if (index == 15) index = stringResponse.indexOf('"searchQuery":"') + 15;
-                            stringResponse = stringResponse.substring(index);
-                            let searchQuery = stringResponse.substring(0, stringResponse.indexOf('"'));
+                        if (/<｜tool▁call▁begin｜>function<｜tool▁sep｜>(webSearch|web_search|searchWeb|search_web)$/gmi.test(stringResponse)) {
+                            let searchQuery = Array.from(s.matchAll(/{\s*?(["']+)(searchQuery|search_query)\1[:]+[\s\r\n]+\1([^\"\']+)\1/gmi), m => m[3]);
                             console.log('It was a tool call tag block for webSearch with this searchQuery: ' + searchQuery);
                             stringResponse = `{ "action": "function-call", "name": "webSearch", "arguments": { "searchQuery": "${searchQuery}"}}`;
-                        } else if (/httpGet/gmi.test(stringResponse)) {
-                            let index = stringResponse.indexOf('"url": "') + 8;
-                            if (index == 7) index = stringResponse.indexOf('"url":"') + 7;
-                            stringResponse = stringResponse.substring(index);
-                            let url = stringResponse.substring(0, stringResponse.indexOf('"'));
+                        } else if (/<｜tool▁call▁begin｜>function<｜tool▁sep｜>(httpGet|http_get|getHttp|get_http)$/gmi.test(stringResponse)) {
+                            let url = Array.from(s.matchAll(/{\s*?(["']+)url\1[:]+[\s\r\n]+\1([^\"\']+)\1/gmi), m => m[2]);
                             console.log('It was a tool call tag block for httpGet with this url: ' + url);
                             stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
                         }
                     } else 
                     // Check it to see if it's python code implementing function calls (sigh!)
-                    // For model: dolphin-2.9.2-qwen2-7b
+                    // For model: dolphin-2.9.2-qwen2-7b (mainly)
                     // Check for a httpGet python implementation.
                     if (/python/gmi.test(stringResponse)
                      && (/http.*?[\r\n\s]*?.*get[\s]*\(/gmi.test(stringResponse)
