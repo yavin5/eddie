@@ -73,7 +73,8 @@ class WebScrapePlugin {
                 // Some web sites are too fictional.  We need factual data.
                 if (line.includes('forbes.com') || line.includes('usatoday.com')
                  || line.includes('yahoofinance.com') || line.includes('finance.yahoo.com') 
-                 || line.includes('bankrate.com')) {
+                 || line.includes('bankrate.com') || line.includes('coingape.com')
+                 || line.includes('cryptonews.com') || line.includes('zebpay.com')) {
                     textLines[arrayIndex] = '';
                     for (let index = arrayIndex; index >= 0; index--) {
                         if (textLines[index].startsWith('description : ')) {
