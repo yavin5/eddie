@@ -437,7 +437,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     }
                 }
             } catch (e) {
-                console.log('Error: ' + e);
+                //console.log('Error: ' + e);
                 // The response was plain text, so we'll give it to the user.
                 isFunctionCall = false;
             }
