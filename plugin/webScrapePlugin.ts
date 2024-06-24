@@ -173,16 +173,20 @@ class WebScrapePlugin {
         }
 
         try {
+            console.log("WebScrapePlugin: httpGet.");
+
+            let plainText = '';
             let jsonText: string = '';
             await fetch(url, {
                 method: 'GET',
                 headers: requestHeaders
             }).then(response => response.text())
               .then(data => { jsonText = data; })
-              .catch(error => console.error(error));
+              .catch(error => {
+                console.error(error);
+                plainText = `HTTP GET request error: ${error}`;
+            });
 
-            console.log("WebScrapePlugin: httpGet.");
-            let plainText = '';
             if (jsonText.startsWith('{')) {
                 plainText = this.scrapeJsonToPlainText(jsonText);
             } else if (jsonText.startsWith('<')) {
@@ -190,8 +194,8 @@ class WebScrapePlugin {
             }
             return plainText;
         } catch (error) {
-            // FIXME: In the case of a 403, follow a small number of redirects.
-            const response = `HTTP GET request error: ${error}`;
+            // TODO: In the case of a 403, follow a small number of redirects.
+            const response = `HTTP GET exception: ${error}`;
             console.error(response);
             return response;
         }
