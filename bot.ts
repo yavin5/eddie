@@ -5,7 +5,6 @@ import dotenv from 'dotenv';
 import { exec } from 'child_process';
 import readline from 'readline';
 import path from 'path';
-import { send } from 'process';
 
 dotenv.config();
 
