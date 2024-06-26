@@ -81,7 +81,13 @@ export class PluginLoader {
       console.log(`Loading plugin: ${file}`);
       const moduleFilename = path.join(this.pluginDir, file);
       //console.log(`.. from file: ${moduleFilename}`);
-      const module = await import(moduleFilename);
+      let module;
+      try {
+        module = await import(moduleFilename);
+      } catch (error) {
+        console.error(`PluginLoader: Error importing plugin ${file}:`, error);
+        continue;
+      }
       const pluginClass = module.default;
       if (!pluginClass) {
         console.error(`PluginLoader: No default export found in '${moduleFilename}'`);
@@ -189,9 +195,13 @@ class JSDocReader {
               if (type && name) {
                 // Add this parameter to the tools API's list of parameters for this function.
                 const currentProperties = functionInfo.parameters.properties;
-                const newPropObj = new Object(
-                  JSON.parse(`{ "${name}": { "type": "${type}", "description": "${description}"}}`));
-                functionInfo.parameters.properties = Object.assign(currentProperties, newPropObj);
+                try {
+                  const newPropObj = new Object(
+                    JSON.parse(`{ "${name}": { "type": "${type}", "description": "${description}"}}`));
+                  functionInfo.parameters.properties = Object.assign(currentProperties, newPropObj);
+                } catch (error) {
+                  console.error(`PluginLoader: Error parsing parameter info for ${name}:`, error);
+                }
 
                 // See if it also has the @llmFunction custom tag.
                 const tagsArray = tag.parent.tags;
