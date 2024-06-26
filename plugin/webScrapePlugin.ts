@@ -1,6 +1,5 @@
 import { jsonToPlainText, Options } from "json-to-plain-text";
 import { JSDOM } from 'jsdom';
-import { json } from "stream/consumers";
 //import fetch from 'node-fetch';
 // TODO: Probably should import and use node-fetch:
 // https://github.com/node-fetch/node-fetch
@@ -127,17 +126,16 @@ class WebScrapePlugin {
      * Uses an HTTP client to perform an HTTP GET request and returns the scraped web response content.
      * @llmFunction
      * @param {string} url The HTTP URL to request
-     * @param {string[]} [params] Request parameters as name=value strings.
      * @returns {string} The HTTP response content
      */
-    async httpGet(url: string, params?: string[]): Promise<string> {
+    async httpGet(url: string): Promise<string> {
         // TODO: Handle HTTP sessions (some sites break if no cookies are returned)
         const requestHeaders: HeadersInit = new Headers();
         //requestHeaders.set('Accept', 'application/json');
 
         // Sometimes the LLM is sending URLs that contain spaces nor quotes.  :(
         let url2 = url.replace(/\S+/g, '');
-        url2 = url.replace(/"/g, '');
+        url2 = url2.replace(/"/g, '');
 
         // Don't bother making requests to example.com.
         if (url2.includes('example.com') || url2.includes('example2.com')) {
@@ -154,19 +152,15 @@ class WebScrapePlugin {
         }
 
         if (!url2.startsWith('http')) {
-            url2 = `http://${url2}`;
+            url2 = `https://${url2}`;
         }
         if (url2.includes('wikipedia.org')) {
             // Switch to the plain text way to search wikipedia.
             let query: string | null = '';
             if (url.includes('&titles=')) {
-                const matches = url.match(/[^&titles=](.*)[^&]/g);
+                const matches = url2.match(/[^&titles=](.*)[^&]/g);
                 if (matches) {
                     query = matches[0];
-                } else if (params) {
-                    if (params.indexOf('query')) query = params[params.indexOf('query')];
-                    if (params.indexOf('q')) query = params[params.indexOf('q')];
-                    if (params.indexOf('titles')) query = params[params.indexOf('titles')];
                 }
             }
             url2 = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=&explaintext=&exlimit=3&titles=w:${query}`;
@@ -177,7 +171,7 @@ class WebScrapePlugin {
 
             let plainText = '';
             let jsonText: string = '';
-            await fetch(url, {
+            await fetch(url2, {
                 method: 'GET',
                 headers: requestHeaders
             }).then(response => response.text())
@@ -198,41 +192,6 @@ class WebScrapePlugin {
             const response = `HTTP GET exception: ${error}`;
             console.error(response);
             return response;
-        }
-    }
-
-    // WIP, not ready yet.
-    async httpPost(url: string, params?: string[], data?: string): Promise<any> {
-        const requestHeaders: HeadersInit = new Headers();
-        requestHeaders.set('Accept', 'application/json');
-
-        let body: { [key: string]: any } = {};
-        if (params) {
-            for (const param in params) {
-                const parts = param.split('=');
-                if (parts.length == 2) {
-                    const key = parts[0];
-                    let val = parts[1];
-                    body[key] = val;
-                }
-            }
-        }
-        try {
-            let jsonText: string = '';
-
-            await fetch(url, {
-                method: 'POST',
-                body: JSON.stringify(body),
-                headers: requestHeaders
-            }).then(response => response.json())
-              .then(data => { jsonText = data; })
-              .catch(error => console.error(error));
-
-            console.log("WebScrapePlugin: httpPost.");
-            return jsonText;
-        } catch (error) {
-            console.error('POST request error:', error);
-            throw error;
         }
     }
 
