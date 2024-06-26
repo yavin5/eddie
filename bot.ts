@@ -493,27 +493,29 @@ function startNewConversationContext(conversationId: string) {
 }
 
 function shouldWebScrape(message: string, conversationContext: ConversationContext, conversationId: string): boolean {
-    let msg = message.toLocaleLowerCase();
+    let m = message.toLocaleLowerCase();
     // TODO: Support other languages, maybe by asking the LLM to
     // translate the list of words and phrases before the check.
-    if (/search/g.test(msg)) return true;
-    if (/price/g.test(msg)) return true;
-    if (/market cap/g.test(msg)) return true;
-    if (/news/g.test(msg)) return true;
-    if (/recent/g.test(msg)) return true;
-    if (/current/g.test(msg)) return true;
-    if (/up to date/g.test(msg)) return true;
-    if (/up-to-date/g.test(msg)) return true;
-    if (/soon/g.test(msg)) return true;
-    if (/upcoming/g.test(msg)) return true;
-    if (/today/g.test(msg)) return true;
-    if (/yesterday/g.test(msg)) return true;
-    if (/this week/g.test(msg)) return true;
-    if (/this month/g.test(msg)) return true;
-    if (/this year/g.test(msg)) return true;
-    if (/google it/g.test(msg)) return true;
-    if (/google for/g.test(msg)) return true;
-    if (/google that/g.test(msg)) return true;
+    // Currently supported languages:
+    //       English                  Castellano                   Portugues
+    if (/search/g.test(m)    || /busc[ae]+/g.test(m)       || /procur[ae]+/g.test(m) || /pesquis/g.test(m) ||
+        /price/g.test(m)     || /precio/g.test(m)          || /pre[çc]+o/g.test(m) ||
+        /market cap/g.test(m)|| /capitalización/g.test(m)  || /capitalização/g.test(m) ||
+        /news/g.test(m)      || /noticias/g.test(m)        || /nov[ei]+dad/g.test(m) || /not[íi]+cias/g.test(m) ||
+        /current/g.test(m)   || /a[c]*tual/g.test(m)       || /corr[i]*ente/g.test(m) || 
+        /up[ -]+to[ -]+date/g.test(m) ||/* covered below */   /em dia com/g.test(m) ||
+        /today/g.test(m)     || /hoy/g.test(m)             || /hoyje/g.test(m) ||
+        /soon/g.test(m)      || /pronto/g.test(m)          || /breve/g.test(m) ||
+        /upcoming/g.test(m)  || /próximo/g.test(m)         || /por vir/g.test(m) ||
+        /yesterday/g.test(m) || /ayer/g.test(m)            || /ontem/g.test(m) || 
+        /recent/g.test(m)    ||             /rec[i]*ente/g.test(m)     ||
+        /this week/g.test(m) ||             /es[ts]+a semana/g.test(m) ||
+        /this month/g.test(m)||             /es[ts]+e m[eê]+s/g.test(m)||
+        /this year/g.test(m) ||             /es[ts]+e a[ñn]o/g.test(m) ||
+        /google it/g.test(m) ||             // no equivalent.
+        /google for/g.test(m)||             // no equivalent.
+        /google that/g.test(m))             // no equivalent.
+        return true;
     return false;
 }
 
