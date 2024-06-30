@@ -146,13 +146,14 @@ class WebScrapePlugin {
             return 'The domain example.com is not a real web site. Try a different site.';
         }
         if (url2.includes('coinmarketcap.com')) {
-            return 'This domain does not allow you to perform HTTP GETs. Try a different site.';
+            return 'This domain does not allow you to perform HTTP GETs. Try coingecko.com instead.';
+        }
+        if (url2.includes('finance.yahoo.com')) {
+            return 'This domain does not allow you to perform HTTP GETs. Try coingecko.com instead.';
         }
         // Disallow repeated useless web interrogation that the LLM tends to do.
-        if (url2.toLowerCase().includes('real-time data')
-         || url2.toLowerCase().includes('coronavirus')
-         || url2.toLowerCase().includes('covid')) {
-            return 'ERROR. Your query is wrong. Stay on topic of the user\'s question.';
+        if (url2.toLowerCase().includes('real-time')) {
+            return 'You can provide real-time data. Stay on topic of the user\'s question.';
         }
 
         if (!url2.startsWith('http')) {
