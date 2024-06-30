@@ -70,7 +70,7 @@ class WebScrapePlugin {
                 if (!(line.startsWith('url : ') || line.startsWith('title : ') || line.startsWith('description : '))) {
                    textLines[arrayIndex] = '';
                 }
-                // Some web sites are too fictional.  We need factual data.
+                // Some web sites are too fictional.  We need factual, pertinent data.
                 line = line.toLowerCase();
                 if (line.includes('forbes.com') || line.includes('usatoday.com')
                  || line.includes('yahoofinance.com') || line.includes('finance.yahoo.com') 
@@ -78,7 +78,7 @@ class WebScrapePlugin {
                  || line.includes('cryptonews.com') || line.includes('zebpay.com')
                  || line.includes('ndtv.com') || line.includes('indiatimes.com')
                  || line.includes('democracynow.org') || line.includes('nationalpost.com')
-                 || line.includes('youtube.com')) {
+                 || line.includes('youtube.com') || line.includes('milkroad.com')) {
                     textLines[arrayIndex] = '';
                     for (let index = arrayIndex; index >= 0; index--) {
                         if (textLines[index].startsWith('title : ')) {
