@@ -83,6 +83,9 @@ class WebScrapePlugin {
                     for (let index = arrayIndex; index >= 0; index--) {
                         if (textLines[index].startsWith('title : ')) {
                             textLines[index] = '';
+                            if (textLines.lengtht > 4 && textLines[index - 5] && textLines[index - 5].startsWith('description : ')) {
+                                textLines[index - 5] = '';
+                            }
                             if (textLines[index + 1] && textLines[index + 1].startsWith('description : ')) {
                                 textLines[index + 1] = '';
                             }
