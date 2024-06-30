@@ -78,12 +78,13 @@ class WebScrapePlugin {
                  || line.includes('cryptonews.com') || line.includes('zebpay.com')
                  || line.includes('ndtv.com') || line.includes('indiatimes.com')
                  || line.includes('democracynow.org') || line.includes('nationalpost.com')
-                 || line.includes('youtube.com') || line.includes('milkroad.com')) {
+                 || line.includes('youtube.com') || line.includes('milkroad.com')
+                 || line.includes('coinpedia.org')) {
                     textLines[arrayIndex] = '';
                     for (let index = arrayIndex; index >= 0; index--) {
                         if (textLines[index].startsWith('title : ')) {
                             textLines[index] = '';
-                            if (textLines.lengtht > 4 && textLines[index - 5] && textLines[index - 5].startsWith('description : ')) {
+                            if (textLines.length > 4 && textLines[index - 5] && textLines[index - 5].startsWith('description : ')) {
                                 textLines[index - 5] = '';
                             }
                             if (textLines[index + 1] && textLines[index + 1].startsWith('description : ')) {
