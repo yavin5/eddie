@@ -55,68 +55,60 @@ class WebScrapePlugin {
                 method: 'GET',
                 headers: requestHeaders
             }).then(response => response.json())
-              .then(data => { jsonText = data; })
+              .then(data => { jsonText = JSON.stringify(data); })
               .catch(error => console.error(error));
 
             console.log("WebScrapePlugin: webSearch.");
 
-            let plainText = this.scrapeJsonToPlainText(jsonText);
+            //console.log('\nUnmodified JSON from the search engine:\n\n ' + jsonText);
 
             // Scrape out url, title, description fields.
-            let textLines: string[] = plainText.split('\n');
-            let arrayIndex = 0;
-            for (let line of textLines) {
-                //console.log("LINE: " + line);
-                if (!(line.startsWith('url : ') || line.startsWith('title : ') || line.startsWith('description : '))) {
-                   textLines[arrayIndex] = '';
-                }
-                // Some web sites are too fictional.  We need factual, pertinent data.
+            let textLines: string[] = Array.from(jsonText.matchAll(/("(url|title|description)":"([^\0-\x19"\\]|\\[^\0-\x19])+")/gm), m => m[1]);
+
+            // Remove all the quotes first.
+            for (let arrayIndex = 0; arrayIndex < textLines.length; arrayIndex++) {
+    	    	textLines[arrayIndex] = textLines[arrayIndex].replace(/\"/gm, '');
+	        }
+    	    for (let arrayIndex = 0; arrayIndex < textLines.length; arrayIndex++) {
+	        	let line: string = textLines[arrayIndex];
+                //console.log(`LINE ${arrayIndex}: ${line}`);
                 line = line.toLowerCase();
+
+                // Some web sites are too fictional.  We need factual, pertinent data.
                 if (line.includes('forbes.com') || line.includes('usatoday.com')
-                 || line.includes('yahoofinance.com') || line.includes('finance.yahoo.com') 
+                 || line.includes('yahoofinance.com') || line.includes('finance.yaho0.com') 
                  || line.includes('bankrate.com') || line.includes('coingape.com')
                  || line.includes('cryptonews.com') || line.includes('zebpay.com')
                  || line.includes('ndtv.com') || line.includes('indiatimes.com')
+                 || line.includes('hamariweb.com')
                  || line.includes('democracynow.org') || line.includes('nationalpost.com')
                  || line.includes('youtube.com') || line.includes('milkroad.com')
                  || line.includes('coinpedia.org')) {
-                    textLines[arrayIndex] = '';
-                    for (let index = arrayIndex; index >= 0; index--) {
-                        if (textLines[index].startsWith('title : ')) {
-                            textLines[index] = '';
-                            if (textLines.length > 4 && textLines[index - 5] && textLines[index - 5].startsWith('description : ')) {
-                                textLines[index - 5] = '';
-                            }
-                            if (textLines[index + 1] && textLines[index + 1].startsWith('description : ')) {
-                                textLines[index + 1] = '';
-                            }
-                            if (textLines[index + 2] && textLines[index + 2].startsWith('description : ')) {
-                                textLines[index + 2] = '';
-                            }
-                            if (textLines[index + 3] && textLines[index + 3].startsWith('description : ')) {
-                                textLines[index + 3] = '';
-                            }
-                            break;
-                        }
+	    	        let index = arrayIndex;
+		            textLines[index] = '';
+                    if (textLines[index - 1] !== undefined && textLines[index - 1].startsWith('title:')) {
+                        textLines[index - 1] = '';
+                    }
+                    if (textLines[index + 1] && textLines[index + 1].startsWith('description:')) {
+                        textLines[index + 1] = '';
+                    }
+                    if (textLines[index + 2] && textLines[index + 2].startsWith('url:')) {
+                        textLines[index + 2] = '';
                     }
                 }
-                arrayIndex++;
             }
-            plainText = textLines.join('\n');
-            plainText = plainText.replace(/\n\n\n(\n)+/g, '\n---\n');
+            let plainText = textLines.join('\n');
             plainText = plainText.replace(/\n\n/g, '\n');
 
             const query = searchQuery.toLocaleLowerCase();
             // These shouldn't be hard-coded here except Brave Search returns bad results otherwise.
-            if (query.includes('crypto')    || query.includes('coin')
-             || query.includes('bitcoin')   || query.includes('token')
-             || query.includes(' eth')      || query.includes('ethereum')
-             || query.includes('blockchain')|| query.includes('blockdag')) {
-                plainText = 'title : Prices, market cap, cryptocurrency stats, up to date!\nurl : https://coingecko.com\n---\n'
+            if (query.includes('crypto') || query.includes('coin')
+             || query.includes('bitcoin') || query.includes('token')
+             || query.includes(' eth') || query.includes('ethereum')
+             || query.includes('blockchain') || query.includes('blockdag')) {
+                plainText = 'title:Prices, market cap, cryptocurrency stats, up to date!\nurl:https://coingecko.com\n'
                     + plainText;
-             }
-
-            //console.log('\n\n\n\nwebSearch returning: \n\n' + plainText);
+            }
 
             return plainText;
         } catch(error) {
