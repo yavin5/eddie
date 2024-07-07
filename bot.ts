@@ -22,7 +22,7 @@ const llmApiUrl = process.env.LLM_API_URL!;
 // Update with your LLM model name
 const llmModel = process.env.LLM_MODEL!;
 
-// Prune the chat context messages down to an 8K bytes context window.
+// Prune the chat context messages down to an 128K *tokens* context window.
 const llmModelContextSize: number = +process.env.LLM_MODEL_CONTEXT_SIZE! || 8192;
 
 // Bot name will be autodetected from the Signal account and changed
@@ -243,7 +243,8 @@ function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
     let totalSize = new TextEncoder().encode(messages[0].content).length;
     for (let i = messages.length - 1; i > 0; i--) {
         const messageSize = new TextEncoder().encode(messages[i].content).length;
-        if (totalSize + messageSize <= llmModelContextSize) {
+        if (totalSize + messageSize <= (llmModelContextSize * 4.5 /*chars*/
+            - (functionCallSystemMessage2.length + 6000 /*model-prompt + query*/))) {
             prunedMessages.unshift(messages[i]);
             totalSize += messageSize;
         } else {
@@ -408,7 +409,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     let functionResult = await invokeLlmFunction(objectMessage, conversationId);
 
                     // Clip the function call result text to a configurable max number of bytes.
-                    let maxBytes: number = 1024;
+                    let maxBytes: number = 280000;
                     const llmFunctionResponseMaxBytes: unknown = process.env.LLM_FUNCTION_RESPONSE_MAX_BYTES;
                     if (typeof llmFunctionResponseMaxBytes === 'number') maxBytes = llmFunctionResponseMaxBytes;
                     if (typeof llmFunctionResponseMaxBytes === 'string') maxBytes = Number.parseInt(llmFunctionResponseMaxBytes);
