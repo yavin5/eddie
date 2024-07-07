@@ -582,7 +582,7 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
                 try {
                     // INVOKE the LLM function!
                     const stringResult = await plugins[functionName](...funcArgs);
-                    console.log(`Invoker received result: ${stringResult}`);
+                    //console.log(`Invoker received result: ${stringResult}`);
                     if (linkUrl && stringResult
                        && !(stringResult.includes(':404,') && stringResult.includes('\"error\"'))) {
                         sendMessage(conversationId, `🤖 ${linkUrl}`);
