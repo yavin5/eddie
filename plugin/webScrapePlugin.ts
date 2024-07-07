@@ -80,7 +80,7 @@ class WebScrapePlugin {
                  || line.includes('bankrate.com') || line.includes('coingape.com')
                  || line.includes('cryptonews.com') || line.includes('zebpay.com')
                  || line.includes('ndtv.com') || line.includes('indiatimes.com')
-                 || line.includes('hamariweb.com')
+                 || line.includes('hamariweb.com') || line.includes('metro.co.uk')
                  || line.includes('democracynow.org') || line.includes('nationalpost.com')
                  || line.includes('youtube.com') || line.includes('milkroad.com')
                  || line.includes('coinpedia.org')) {
@@ -129,7 +129,7 @@ class WebScrapePlugin {
         const requestHeaders: HeadersInit = new Headers();
         //requestHeaders.set('Accept', 'application/json');
 
-        // Sometimes the LLM is sending URLs that contain spaces nor quotes.  :(
+        // Sometimes the LLM is sending URLs that contain spaces or quotes. :(
         let url2 = url.replace(/\s+/g, '');
         url2 = url2.replace(/"/g, '');
 
@@ -137,10 +137,8 @@ class WebScrapePlugin {
         if (url2.includes('example.com') || url2.includes('example2.com')) {
             return 'The domain example.com is not a real web site. Try a different site.';
         }
-        if (url2.includes('coinmarketcap.com')) {
-            return 'This domain does not allow you to perform HTTP GETs. Try coingecko.com instead.';
-        }
-        if (url2.includes('finance.yahoo.com')) {
+        if (url2.includes('coinmarketcap.com') || url2.includes('finance.yahoo.com')
+         || url2.includes('metro.co.uk')) {
             return 'This domain does not allow you to perform HTTP GETs. Try coingecko.com instead.';
         }
         // Disallow repeated useless web interrogation that the LLM tends to do.
@@ -178,12 +176,16 @@ class WebScrapePlugin {
                 plainText = `HTTP GET request error: ${error}`;
             });
 
+            jsonText = jsonText.replace(/[\n\r]/g, '');
+            jsonText = jsonText.trim();
             if (jsonText.startsWith('{')) {
                 plainText = this.scrapeJsonToPlainText(jsonText);
+                return plainText;
             } else if (jsonText.startsWith('<')) {
                 plainText = this.scrapeHtmlToPlainText(jsonText);
+                return plainText;
             }
-            return plainText;
+            return jsonText;
         } catch (error) {
             // TODO: In the case of a 403, follow a small number of redirects.
             const response = `HTTP GET exception: ${error}`;
