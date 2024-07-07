@@ -173,7 +173,7 @@ class WebScrapePlugin {
               .then(data => { jsonText = data; })
               .catch(error => {
                 console.error(error);
-                plainText = `HTTP GET request error: ${error}`;
+                jsonText = `HTTP GET request error: ${error}`;
             });
 
             jsonText = jsonText.replace(/[\n\r]/g, '');
@@ -188,7 +188,8 @@ class WebScrapePlugin {
             return jsonText;
         } catch (error) {
             // TODO: In the case of a 403, follow a small number of redirects.
-            const response = `HTTP GET exception: ${error}`;
+            console.error('httpGet last catch error.');
+            const response = `HTTP GET error: ${error}`;
             console.error(response);
             return response;
         }
