@@ -520,7 +520,7 @@ function shouldWebScrape(message: string, conversationContext: ConversationConte
         /google[ ]+that/g.test(m))             // no equivalent.
         return true;
     // Phrase patterns..
-    if (/(read|get)+[ ]+the[ ]+(web)*[ ]*(site|page)/g.test(m) ||
+    if (/(read|get)+[ ]+th(e|is)[ ]+(web)*[ ]*(site|page)/g.test(m) ||
         (/leia|lee/g.test(m) && /p[áa]gina/g.test(m) && /web/g.test(m)) ||
         (/list|numbers/g.test(m) && /crypto|nft|token|stock|supply/g.test(m)) ||
         (/indíque|liste/g.test(m) && /cripto|nft|token|acciones|ações|suministro|suprimento/g.test(m))) {
