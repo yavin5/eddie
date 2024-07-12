@@ -10,7 +10,7 @@
  * @author Matt Williams
  * @author Yavin Five
  */
-class MapsPlugin {
+export default class MapsPlugin {
     public constructor() {
         console.log('MapsPlugin loaded.');
     }
