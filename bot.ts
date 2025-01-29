@@ -307,6 +307,9 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         }
         console.log(`LLM response: ${stringResponse}`);
 
+        // Clip off any leading <think>cot</think> content (Deepseek R1)
+        stringResponse = stringResponse.replace('/.*</think>[\s]*/gm', '');
+
         // In the case of a recurse, it's a function call cycle, so return here early.
         if (recurse) return stringResponse;
 
