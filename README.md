@@ -962,13 +962,13 @@ WantedBy=default.target
 
 .. and there is a special user and group:
 
-# id sshtunuser
-uid=1002(sshtunuser) gid=1002(sshtunuser) groups=1002(sshtunuser)
+     # id sshtunuser
+     uid=1002(sshtunuser) gid=1002(sshtunuser) groups=1002(sshtunuser)
 
 .. and a TUN/TAP device:
 
-# ls -la /dev/net/tun 
-crw-rw-rw-. 1 root root 10, 200 Feb 23 11:20 /dev/net/tun
+     # ls -la /dev/net/tun 
+     crw-rw-rw-. 1 root root 10, 200 Feb 23 11:20 /dev/net/tun
 
 .. then, to SSH into the destination server:
 
@@ -982,15 +982,15 @@ And once that is connected, in another terminal on your laptop you can SSH into 
 
 Step by step SSHing: First ssh into Hostinger:
 
-ssh -Y -p 65002 u372297933@195.35.38.251 -L 22000:localhost:10022 -L 11434:localhost:11435 # hostinger eddie jasonb
+     $ ssh -Y -p 65002 u372297933@195.35.38.251 -L 22000:localhost:10022 -L 11434:localhost:11435 # hostinger eddie jasonb
 
 And from inside the Hostinger host:
 
-$ while [ true ] ; do ssh -p 10022 jasonb@localhost -R :5900:localhost:15900 -L 11434:localhost:11434; sleep 1 ; done # eddie jasonb
+     $ while [ true ] ; do ssh -p 10022 jasonb@localhost -R :5900:localhost:15900 -L 11434:localhost:11434; sleep 1 ; done # eddie jasonb
 
 This tunnels AI API traffic. After this you can connect to the Ollama API at loccalhost port 11434, like this:
 
-time curl http://localhost:11434/api/chat -d '{
+     $ time curl http://localhost:11434/api/chat -d '{
        "model": "dolphin-llama3-eddie-10:8b",
        "messages": [
          { "role": "user", "content": "what is your favorite color?" }
@@ -1000,7 +1000,7 @@ time curl http://localhost:11434/api/chat -d '{
 Here is Eddie's autossh service:
 
      # cat /etc/systemd/system/eddie.service
-
+```config
 [Unit]
 Description=Autossh
 Wants=network-online.target
@@ -1018,6 +1018,7 @@ StandardError=append:/var/log/autossh.log
 
 [Install]
 WantedBy=default.target
+```
 
 To enable the autossh service, as root:
 
@@ -1033,7 +1034,7 @@ Here's Eddie's bot service:
      npm start
 
      # cat /etc/systemd/system/eddie.service
-
+```config
 [Unit]
 Description=Eddie Service
 After=network-online.target
@@ -1048,7 +1049,7 @@ Environment="PATH=/usr/local/cuda/bin:/home/jasonb/.local/bin:/home/jasonb/bin:/
 
 [Install]
 WantedBy=default.target
-
+```
 To enable the eddie service, as root:
 
      # systemctl daemon-reload
@@ -1083,14 +1084,16 @@ GRUB_ENABLE_BLSCFG=true
 
 ### Songs About Eddie
 
-Prompt: 80s style Hard Rock ballad about Eddie signal bot sailing on the space ship Heart of Gold with an infinite improbability drive and a brain the size of five GPUs, written and performed by Rush.
+Prompt: 80s style Hard Rock ballad about Eddie signal bot sailing on the space ship Heart of Gold with an infinite improbability drive and a brain the size of five GPUs, apparently written and performed by Rush.
 
 Heart of Gold Voyage
 https://suno.com/song/297fceca-7921-4e33-ac99-e42dd7dd06a3
+
 https://suno.com/song/0be0540f-0f15-43c9-8535-01782f56ac2f
 
-Eddie e o Bot do Sinal
+Eddie e o Bot do Signal
 https://suno.com/song/c14e533a-22e6-4be4-ac56-302614b9d58c
+
 https://suno.com/song/bc933d2f-6437-4cf6-83d0-935eba2f97e6
 
 ### Links
