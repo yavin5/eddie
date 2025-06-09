@@ -448,6 +448,9 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
                     if (objectMessage.action && objectMessage.content) {
                         stringResponse = objectMessage.content;
+                    } else if (objectMessage.role && objectMessage.content &&
+                        objectMessage.role == "assistant") {
+                        stringResponse = objectMessage.content;
                     }
                 }
             } catch (e) {
