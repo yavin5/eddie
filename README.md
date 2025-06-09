@@ -1065,7 +1065,8 @@ To see the logs:
 
 Also the nouveau module is blacklisted so that the nvidia module is used:
 
-# cat /etc/default/grub 
+     # cat /etc/default/grub
+```BASH
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="$(sed 's, release .*$,,g' /etc/system-release)"
 GRUB_DEFAULT=saved
@@ -1074,7 +1075,7 @@ GRUB_TERMINAL_OUTPUT="console"
 GRUB_CMDLINE_LINUX="rhgb quiet rd.driver.blacklist=nouveau modprobe.blacklist=nouveau"
 GRUB_DISABLE_RECOVERY="true"
 GRUB_ENABLE_BLSCFG=true
-
+```
 .. then reinstall grub:
 
     # grub2-mkconfig -o /boot/grub2/grub.cfg
