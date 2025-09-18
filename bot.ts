@@ -1,4 +1,5 @@
 import { PluginLoader } from './plugin/pluginLoader';
+import { QwenImageGenerator, ImageGenerationResult } from './imageGenerator';
 import axios from 'axios';
 import { parse } from 'best-effort-json-parser';
 import dotenv from 'dotenv';
@@ -117,7 +118,14 @@ function sendMessage(recipient: string, message: string): void {
     if (recipient.endsWith('=')) {
         recipientCli = `-g ${recipientCli}`;
     }
-    const command = `${signalCliPath} -u ${botPhoneNumber} send -m '${message}' ${recipientCli}`;
+    // If the message is a file path / filename then send that file.
+    const filePathRegex = /^(?:[a-zA-Z]:\\)?[\w\-\\\/\.]*[\w\-]+$/;
+    let messageIsFile = filePathRegex.test(message);
+    let body = `-a '${message}'`;
+    if (messageIsFile) {
+        body = `-m '${message}'`;
+    }
+    const command = `${signalCliPath} -u ${botPhoneNumber} send ${body} ${recipientCli}`;
     console.log(command);
     exec(command);
 }
@@ -131,6 +139,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
     const groupInfo = dataMessage.groupInfo || '';
     const groupId = dataMessage.groupInfo?.groupId || '';
     const content = dataMessage.message || '';
+    const timestamp = dataMessage.timestamp || '0';
 
     console.log('handleMessage');
     console.log(`sender: ${sender}`);
@@ -166,7 +175,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
                 mention.uuid === botPhoneNumber);
             if (mention) {
                 // Handle any slash commands.
-                const handled = await handleSlashCommands(content, groupId);
+                const handled = await handleSlashCommands(content, groupId, timestamp);
                 if (handled) return;
 
                 console.log(`Saying this to LLM: ` + content);
@@ -183,7 +192,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
         if (content.toLowerCase().startsWith(botName.toLowerCase()) ||
             content.toLowerCase().includes('@' + botName.toLowerCase())) {
             // Handle any slash commands.
-            const handled = await handleSlashCommands(content, groupId);
+            const handled = await handleSlashCommands(content, groupId, timestamp);
             if (handled) return;
 
             console.log(`Saying this to LLM: ` + content);
@@ -195,7 +204,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
         // NOT a group message.
         if (!ignoredUsers.has(sender) && !ignoredUsers.has(senderUuid)) {
             // Handle any slash commands.
-            const handled = await handleSlashCommands(content, senderUuid);
+            const handled = await handleSlashCommands(content, senderUuid, timestamp);
             if (handled) return;
 
             console.log(`Saying this to LLM: ` + content);
@@ -210,9 +219,10 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
  * Handle commands like "/clear" that start with a slash.
  * @param {string} content The message from the user.
  * @param {string} conversationId The ID key of the conversation.
+ * @param {string} timestamp Timestamp when the message was recorded.
  * @return {boolean} True if a slash command was handled, false otherwise.
  */
-async function handleSlashCommands(message: string, conversationId: string): Promise<boolean> {
+async function handleSlashCommands(message: string, conversationId: string, timestamp: string): Promise<boolean> {
     let msg = message;
     if (msg.startsWith(botName)) msg = msg.substring(botName.length);
     if (msg.startsWith('@' + botName)) msg = msg.substring(botName.length + 1);
@@ -224,10 +234,55 @@ async function handleSlashCommands(message: string, conversationId: string): Pro
     } else if (msg.startsWith('/help')) {
         await sendMessage(conversationId, 'Commands:\n'
             + '✨ /clear : Clears my conversation memory\n'
-            + '🤷‍♂️ /help  : Show the list of commands');
+            + '🤷‍♂️ /help  : Show the list of commands\n'
+            + '🌇 /image : Generate an image from a prompt');
         return true;
+    } else if (msg.startsWith('/image')) {
+        imageCommand(conversationId, timestamp, msg.substring(7));
     }
     return false;
+}
+
+/**
+ * Handle the /image command. Everything in the prompt variable is sent as the prompt for generating the image.
+ * @param {string} conversationId The ID key of the conversation.
+ * @param {string} timestamp The timestamp when the message was recorded.
+ * @param {string} prompt The string prompt for generating an image.
+ * @return {Promise<void>} Eventually returns a void.
+ */
+async function imageCommand(conversationId: string, timestamp: string, prompt: string): Promise<void> {
+    const senderUuid = conversationId;
+    const messageId = timestamp;
+    const width = 1024;
+    const height = 1024;
+
+    console.log(`Generating image for prompt: "${prompt}"`);
+
+    const result: ImageGenerationResult = await imageGenerator.generateImageFromPrompt(
+        senderUuid,
+        messageId,
+        prompt,
+        width,
+        height
+    );
+
+    if (result.status === 'success') {
+        const imagePath = result.imagePath;
+        console.log(`Image generated successfully: ${imagePath}`);
+        await sendMessage(conversationId, imagePath);
+        try {
+            await fs.unlink(imagePath);
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                console.error(`File ${imagePath} does not exist.`);
+            } else {
+                console.error(`Error deleting file ${imagePath}:`, error.message);
+            }
+        }
+    } else {
+        console.error(`Error generating image: ${result.message}`);
+	await sendMessage(conversationId, "😵‍💫 Error creating image. Sorry!");
+    }
 }
 
 /**
