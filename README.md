@@ -14,14 +14,15 @@ Eddie is an AI chatbot that talks over instant messaging, primarily Signal messe
 
 ### Technology Stack
 
-- Typescript 5.1.x
-- Nodejs 20.12.2
-- Java 17.0.9
+- Typescript 5.1.x+
+- Nodejs 20.12.2+
 - signal-cli 0.13.3+
+- Java 21.0.5+: only required by signal-cli
 - axios
-- ollama 0.1.44+
-- Fedora Linux
+- ollama 0.7.1+
+- Fedora Linux 42+ probably also works well on macos
 - Signal client on desktop or mobile
+- [Spectacle server](https://github.com/yavin5/spectacle) if you want AI image generation also
 
 ### Web Scrape Mode / Just-in-time Web Search
 
@@ -71,20 +72,16 @@ The above procedure works well for some open source models (deepseek coder 2 128
 
 #### TODO : Upcoming code changes
 
-- Limit Signal response sends to 2000 chars.
-- QWQ refuses to answer political questions: "Sorry, but I can't answer that question. As an AI language model, it's important for me to stay neutral and 
-not engage in political discussions or predictions about future events."
-- QWQ refuses to give financial / investment advice: "I cannot provide information on which specific cryptocurrencies you should invest in. It is important to do your own research and consult with a financial advisor before making any investment decisions. Additionally, I am programmed to follow ethical guidelines and not promote or encourage investments without proper caution."
-- Format the context and query just like a RAG prompt. Because otherwise the LLM doesn't really know what it's doing with all that info.
-- Major feature: Add RAG capability.
-- Major feature: COT Reasoning prompts / jobs.  Each one of these would take longer, use several times the regular compute, and needs a job ID and job control.
+- Feature: Add the capability of generating images using the Spectacle image server.
+- Bug fix: Format the context and query just like a RAG prompt. Because otherwise the LLM doesn't really know what it's doing with all that info.
+- Feature: Add RAG capability.
+- Feature: Task manager with user added tasks that run to completion over a long span of time.  Each one of these would take longer, use several times the regular compute, and needs a job ID and job control.
   * Add code to display current status of a numbered job, and have the code continually update that status when possible.
   * Add a new command /stop <jobNumber> and also allow the user to place an emoji on the status to stop the job, maybe also a text reply on the status message of "stop".  Who can stop it?  The user who started it, or any admin user.
-- When the LLM is generating JSON with a message or reason text field, make sure that text field is the first field that the LLM generates, or else it is useless due to predicting next characters / words.
-- Add a date and time function call.
-- If after a function call Eddie responds with {"role":"assistant","content":"something..."}(*throwaway chars after this) then peel the JSON off that and just say the content value. This happens with LLama3.1.
-- If in web scrape mode and the LLM answers with something that isn't a function-call message (a bad choice -- lazy LLM syndrome), the code should retry the LLM query some number of times. Make the number of retries a configuration setting.
-- Add a cryptocurrency plugin, calling cctx. https://github.com/ccxt/ccxt
+- Feature: Add a date and time function call.
+- Bug fix: If after a function call Eddie responds with {"role":"assistant","content":"something..."}(*throwaway chars after this) then peel the JSON off that and just say the content value. This happens with LLama3.1.
+- Bug fix: If in web scrape mode and the LLM answers with something that isn't a function-call message (a bad choice -- lazy LLM syndrome), the code should retry the LLM query some number of times. Make the number of retries a configuration setting.
+- Feature: Add a cryptocurrency plugin, calling cctx. https://github.com/ccxt/ccxt
 - Add a new JSDoc tag named @llmFunctionCallMaxPerQuery <number> The purpose: The LLM may call the function this number of times, max, per user query.
 - Add a new JSDoc tag named @llmFunctionCallMaxRetries <number> The purpose: If the LLM is calling the function and the function errors, this sets how many times may Eddie's code retry the function call, max, per user query.
 - New LLM plugin: cryptocurrencyPlugin.ts - Uses cctx for price and info feeds.
@@ -429,6 +426,17 @@ Here's what the node command looks like:
      /usr/bin/node
      # node --version
      v20.12.2
+
+#### Install Associated AI Model Software
+
+Install the huggingface-cli utility:
+
+     # dnf install -y python3-huggingface-hub
+
+Here's how to check it after that install:
+
+     # which huggingface-cli
+     /usr/bin/huggingface-cli
 
 #### Project Initialization
 
@@ -1099,6 +1107,11 @@ https://suno.com/song/c14e533a-22e6-4be4-ac56-302614b9d58c
 https://suno.com/song/bc933d2f-6437-4cf6-83d0-935eba2f97e6
 
 ### Links
+
+Spectacle server: Open Source AI image generation server
+
+https://github.com/yavin5/spectacle
+
 
 signal-cli manpage
 
