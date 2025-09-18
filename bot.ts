@@ -1,11 +1,12 @@
 import { PluginLoader } from './plugin/pluginLoader';
-import { QwenImageGenerator, ImageGenerationResult } from './imageGenerator';
+import { QwenImageGenerator, ImageGenerationResult } from './spectacle-image-client';
 import axios from 'axios';
 import { parse } from 'best-effort-json-parser';
 import dotenv from 'dotenv';
 import { exec } from 'child_process';
 import readline from 'readline';
 import path from 'path';
+import * as fs from 'fs/promises';
 
 dotenv.config();
 
@@ -119,13 +120,14 @@ function sendMessage(recipient: string, message: string): void {
         recipientCli = `-g ${recipientCli}`;
     }
     // If the message is a file path / filename then send that file.
-    const filePathRegex = /^(?:[a-zA-Z]:\\)?[\w\-\\\/\.]*[\w\-]+$/;
-    let messageIsFile = filePathRegex.test(message);
-    let body = `-a '${message}'`;
+    let messageIsFile = message.startsWith('/');
+    let body = `-m '${message}'`;
+    let attachment = '';
     if (messageIsFile) {
-        body = `-m '${message}'`;
+        body = ``;
+	attachment = ` --attachment ${message}`;
     }
-    const command = `${signalCliPath} -u ${botPhoneNumber} send ${body} ${recipientCli}`;
+    const command = `${signalCliPath} -u ${botPhoneNumber} send ${body} ${recipientCli}${attachment}`;
     console.log(command);
     exec(command);
 }
@@ -239,6 +241,8 @@ async function handleSlashCommands(message: string, conversationId: string, time
         return true;
     } else if (msg.startsWith('/image')) {
         imageCommand(conversationId, timestamp, msg.substring(7));
+	await sendMessage(conversationId, '🛠️  Ok, generating your image now. It may take up to 22 minutes..');
+	return true;
     }
     return false;
 }
@@ -251,14 +255,14 @@ async function handleSlashCommands(message: string, conversationId: string, time
  * @return {Promise<void>} Eventually returns a void.
  */
 async function imageCommand(conversationId: string, timestamp: string, prompt: string): Promise<void> {
-    const senderUuid = conversationId;
+    const senderUuid = conversationId.replace(/-/g, 'x').replace(/\\/g, 'y');
     const messageId = timestamp;
     const width = 1024;
     const height = 1024;
 
     console.log(`Generating image for prompt: "${prompt}"`);
 
-    const result: ImageGenerationResult = await imageGenerator.generateImageFromPrompt(
+    const result: ImageGenerationResult = await new QwenImageGenerator().generateImageFromPrompt(
         senderUuid,
         messageId,
         prompt,
@@ -269,10 +273,11 @@ async function imageCommand(conversationId: string, timestamp: string, prompt: s
     if (result.status === 'success') {
         const imagePath = result.imagePath;
         console.log(`Image generated successfully: ${imagePath}`);
-        await sendMessage(conversationId, imagePath);
+        await sendMessage(conversationId, path.join("/home/jasonb/git/image-server", imagePath));
+	await new Promise((r) => setTimeout(r, 7000));
         try {
             await fs.unlink(imagePath);
-        } catch (error) {
+        } catch (error: any) {
             if (error.code === 'ENOENT') {
                 console.error(`File ${imagePath} does not exist.`);
             } else {
