@@ -255,7 +255,7 @@ async function handleSlashCommands(message: string, conversationId: string, time
  * @return {Promise<void>} Eventually returns a void.
  */
 async function imageCommand(conversationId: string, timestamp: string, prompt: string): Promise<void> {
-    const senderUuid = conversationId.replace(/-/g, 'x').replace(/\\/g, 'y');
+    const senderUuid = conversationId.replace(/-/g, 'x').replace(/\\/g, 'y').replace(/=/g, 'z');
     const messageId = timestamp;
     const width = 1024;
     const height = 1024;
