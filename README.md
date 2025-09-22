@@ -9,7 +9,7 @@ Eddie is an AI chatbot that talks over instant messaging, primarily Signal messe
 - Separate AI chat context per group and per private chat.
 - Able to answer or discuss about recent content outside the scope of the LLM's model by web searching and web scraping.
 - Bot / LLM plugin framework.  Includes a web scrape plugin.
-- Image generation via (Spectacle)[https://github.com/yavin5/spectacle] server: Currently uses the state of the art Qwen-Image diffusion model.
+- Image generation via [Spectacle](https://github.com/yavin5/spectacle) server: Currently uses the state of the art Qwen-Image diffusion model.
 - Works with Ollama AI runtime and Ollama API
 
 ### Technology Stack
