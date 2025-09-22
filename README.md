@@ -72,7 +72,6 @@ The above procedure works well for some open source models (deepseek coder 2 128
 
 #### TODO : Upcoming code changes
 
-- Feature: Add the capability of generating images using the Spectacle image server.
 - Bug fix: Format the context and query just like a RAG prompt. Because otherwise the LLM doesn't really know what it's doing with all that info.
 - Feature: Add RAG capability.
 - Feature: Task manager with user added tasks that run to completion over a long span of time.  Each one of these would take longer, use several times the regular compute, and needs a job ID and job control.
@@ -99,6 +98,7 @@ The above procedure works well for some open source models (deepseek coder 2 128
 
 #### Done, Implemented Changes
 
+- Feature: Add the capability of generating images using the Spectacle image server.
 - Adjusted context size in bytes, allow user to config context size in *tokens*.
 - Rewrites LLM-written deepseek XML code snippets that represent function calls.
   This is for deepseek coder 2 models.
