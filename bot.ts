@@ -132,6 +132,27 @@ function sendMessage(recipient: string, message: string): void {
     exec(command);
 }
 
+// Helper function to safely escape message content for bash single-quoted string
+function escapeMessageForBash(message: string): string {
+    // Double backslashes first
+    let escaped = message.replace(/([\\])/g, '\\$1');
+    // Escape single quotes as '\'' 
+    escaped = escaped.replace(/(['])/g, '\'\\\'\'');
+    return escaped;
+}
+
+// Helper function to extract content after bot mention for slash command handling
+function extractContentAfterBotMention(content: string, botName: string): string {
+    let msg = content;
+    if (msg.toLowerCase().startsWith(botName.toLowerCase())) {
+        msg = msg.substring(botName.length);
+    }
+    if (msg.toLowerCase().startsWith('@' + botName.toLowerCase())) {
+        msg = msg.substring(botName.length + 1);
+    }
+    return msg.trim();
+}
+
 // Handle incoming messages
 async function handleMessage(botName: string, envelope: any): Promise<void> {
     //if (envelope == null) return;
@@ -171,6 +192,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
         // For now, support @Bot mentions and cases where the message begins
         // with the bot name, only.
         // Check to see if it was a mention of the bot.
+        let handledByMention = false;
         if (dataMessage.mentions) {
             const mention = dataMessage.mentions.find((mention: any) =>
                 mention.number === botPhoneNumber ||
@@ -184,23 +206,25 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
                 const response = await queryLLM('user', content, groupId, false);
                 console.log(`Response from LLM : ` + response);
                 sendMessage(groupId, response);
+                handledByMention = true;
             }
         }
 
         // FIXME: should say else right here.
+        if (!handledByMention) {
+            // Check to see if the bot's name is on the front of the message,
+            // or @BotName (a plain text mention) is in the message somewhere.
+            if (content.toLowerCase().startsWith(botName.toLowerCase()) ||
+                content.toLowerCase().includes('@' + botName.toLowerCase())) {
+                // Handle any slash commands.
+                const handled = await handleSlashCommands(content, groupId, timestamp);
+                if (handled) return;
 
-        // Check to see if the bot's name is on the front of the message,
-        // or @BotName (a plain text mention) is in the message somewhere.
-        if (content.toLowerCase().startsWith(botName.toLowerCase()) ||
-            content.toLowerCase().includes('@' + botName.toLowerCase())) {
-            // Handle any slash commands.
-            const handled = await handleSlashCommands(content, groupId, timestamp);
-            if (handled) return;
-
-            console.log(`Saying this to LLM: ` + content);
-            const response = await queryLLM('user', content, groupId, false);
-            console.log(`Response from LLM : ` + response);
-            sendMessage(groupId, response);
+                console.log(`Saying this to LLM: ` + content);
+                const response = await queryLLM('user', content, groupId, false);
+                console.log(`Response from LLM : ` + response);
+                sendMessage(groupId, response);
+            }
         }
     } else {
         // NOT a group message.
@@ -225,10 +249,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
  * @return {boolean} True if a slash command was handled, false otherwise.
  */
 async function handleSlashCommands(message: string, conversationId: string, timestamp: string): Promise<boolean> {
-    let msg = message;
-    if (msg.startsWith(botName)) msg = msg.substring(botName.length);
-    if (msg.startsWith('@' + botName)) msg = msg.substring(botName.length + 1);
-    msg = msg.trim();
+    let msg = extractContentAfterBotMention(message, botName);
     if (msg.startsWith('/clear')) {
         await sendMessage(conversationId, '✨ My conversation context is now cleared.');
         startNewConversationContext(conversationId);
@@ -240,8 +261,9 @@ async function handleSlashCommands(message: string, conversationId: string, time
             + '🌇 /image : Generate an image from a prompt');
         return true;
     } else if (msg.startsWith('/image')) {
-        imageCommand(conversationId, timestamp, msg.substring(7));
-	await sendMessage(conversationId, '🛠️  Ok, generating your image now. It may take up to 22 minutes..');
+        const prompt = msg.substring('/image'.length).trim();
+        imageCommand(conversationId, timestamp, prompt);
+	await sendMessage(conversationId, '🛠️  Ok, queued your image for generation. It may take up to 6 minutes..');
 	return true;
     }
     return false;
@@ -255,10 +277,11 @@ async function handleSlashCommands(message: string, conversationId: string, time
  * @return {Promise<void>} Eventually returns a void.
  */
 async function imageCommand(conversationId: string, timestamp: string, prompt: string): Promise<void> {
+    // Sanitize senderUuid for filename safety
     const senderUuid = conversationId.replace(/-/g, 'x').replace(/\\/g, 'y').replace(/=/g, 'z');
     const messageId = timestamp;
-    const width = 1024;
-    const height = 1024;
+    const width = 512;
+    const height = 512;
 
     console.log(`Generating image for prompt: "${prompt}"`);
 
@@ -323,6 +346,94 @@ function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
     return prunedMessages;
 }
 
+// Helper function to clip <think>cot</think> content from LLM response (Deepseek R1)
+function clipThinkTags(response: string): string {
+    const lines = response.split(/\r?\n/);
+    let found = false;
+    let result: string[] = [];
+    for (let line of lines) {
+        if (!found && line.includes('</think>')) {
+            found = true;
+            continue;
+        }
+        if (found) {
+            result.push(line);
+        }
+    }
+    return found ? result.join('\n').trim() : response;
+}
+
+// Helper function to normalize function call JSON from LLM response
+function normalizeFunctionCallJson(response: string): string | null {
+    // Clean up excessive backslashes
+    let cleaned = response.replace(/\\\\+/g, '\\');
+
+    // Check for JSON starting with { action: ...
+    let matches = cleaned.match(/^[\s]*{[\s\n\r]*[\\]*["][\s]*action[\s]*[\\]*["][\s]*:.*/gm);
+    if (matches) {
+        // Extract from first { to last }
+        const start = cleaned.indexOf('{');
+        const end = cleaned.lastIndexOf('}') + 1;
+        cleaned = cleaned.substring(start, end);
+    } else {
+        // Check for Python-like implementations (hacks for specific models)
+        // For httpGet
+        if (/httpGet[\s]*\(/gmi.test(cleaned)) {
+            let index = cleaned.indexOf('httpGet');
+            cleaned = cleaned.substring(index);
+            index = cleaned.indexOf('\'');
+            if (index === -1) index = cleaned.indexOf('\"');
+            let url = cleaned.substring(0, index);
+            console.log('It was a python impl for httpGet with this url: ' + url);
+            return `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
+        }
+        // For webSearch
+        if (/python/gmi.test(cleaned)
+            && (/search[\s]*\(/gmi.test(cleaned)
+            || /google.*?[\r\n\s]*?.*search[\s]*\(/gmi.test(cleaned)
+            || /search.*?[\r\n\s]*?.*web[\s]*\(/gmi.test(cleaned))) {
+            cleaned = cleaned.toLowerCase();
+            let index = cleaned.indexOf('\"');
+            if (index === -1) index = cleaned.indexOf('\'');
+            cleaned = cleaned.substring(index);
+            index = cleaned.indexOf('\"');
+            if (index === -1) index = cleaned.indexOf('\'');
+            let searchQuery = cleaned.substring(0, index);
+            if (searchQuery.indexOf('\"') !== -1) {
+                searchQuery = searchQuery.substring(searchQuery.indexOf('\"'));
+            }
+            console.log('It was a python impl for webSearch with this searchQuery: ' + searchQuery);
+            return `{ "action": "function-call", "name": "webSearch", "arguments": { "searchQuery": "${searchQuery}"}}`;
+        }
+        console.log("Don't know what content type is in the message.");
+        return null;
+    }
+    return cleaned;
+}
+
+// Helper function to build function response JSON
+function buildFunctionResponse(functionResult: string): string {
+    const value = {
+        status: "OK",
+        message: functionResult
+    };
+    const content = JSON.stringify({
+        from: "function-response",
+        value: value
+    });
+    return JSON.stringify({
+        role: "user",
+        content: content
+    });
+}
+
+// Helper function to remove trailing JSON messages from context
+function removeTrailingJsonMessages(messages: ChatMessage[]): void {
+    while (messages.length > 0 && messages[messages.length - 1].content.startsWith('{')) {
+        messages.splice(messages.length - 1, 1);
+    }
+}
+
 // Query the local LLM runtime
 async function queryLLM(actor: string, message: string, conversationId: string, recurse: boolean): Promise<string> {
     try {
@@ -368,17 +479,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         console.log(`LLM response: ${stringResponse}`);
 
         // Clip off any leading <think>cot</think> content (Deepseek R1)
-        const lines = stringResponse.split(/\r?\n/);
-        let found = false;
-        let result = [];
-        for (let line of lines) {
-            if (!found && line.includes('</think>')) {
-                found = true;
-                continue;
-            }
-            if (found) result.push(line);
-        }
-        if (found) stringResponse = result.join('\n').trim();
+        stringResponse = clipThinkTags(stringResponse);
 
         // In the case of a recurse, it's a function call cycle, so return here early.
         if (recurse) return stringResponse;
@@ -388,78 +489,12 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         while (isFunctionCall && functionCallCounter++ <= 4) {
             if (functionCallCounter > 1) console.log(`Function call ${functionCallCounter}`);
             try {
-                stringResponse = stringResponse.replace(/\\\\+/g, '');
-                stringResponse = stringResponse.replace(/\\\\+/g, '');
-                let matches: RegExpMatchArray | null;
-                // Check to see if it contained JSON text.
-                if (matches = stringResponse.match(/^[\s]*{[\s\n\r]*[\\]*["][\s]*action[\s]*[\\]*["][\s]*:.*/gm)) {
-                    console.log("JSON content detected.");
-
-                    // Clip out from the first '{' to the last '}'.
-                    stringResponse = stringResponse.substring(stringResponse.indexOf('{'),stringResponse.lastIndexOf('}') + 1);
-                    // best-effort-json-parser to repair anything that is wrong with the LLM's JSON.
-                    stringResponse = JSON.stringify(parse(stringResponse));
-                    console.log('sanitized JSON: ' + stringResponse);
-                } else {
-                    // It didn't contain JSON.. maybe contains markup tool tags or python?
-
-                    // See if it's a <｜tool▁calls▁begin｜> block
-                    // For model: deepseek-coder-v2
-                    if (/<｜tool▁calls▁begin｜>/gmi.test(stringResponse)) {
-                        // This block may contain N number of <｜tool▁call▁begin｜>
-                        // tags, each one being a tool call.  For now, do the 1st one!
-                        stringResponse = stringResponse.toLowerCase();
-                        // FIXME: Don't hard code function names or params.
-                        if (/<｜tool▁call▁begin｜>function<｜tool▁sep｜>(webSearch|web_search|searchWeb|search_web)$/gmi.test(stringResponse)) {
-                            let searchQuery: string | string[] = Array.from(stringResponse.matchAll(/{\s*?(["']+)(searchQuery|search_query)\1[:]+[\s\r\n]*\1(.+)\1/gmi), m => m[3]);
-                            console.log('It was a tool call tag block for webSearch with this searchQuery: ' + searchQuery);
-                            stringResponse = `{ "action": "function-call", "name": "webSearch", "arguments": { "searchQuery": "${searchQuery}"}}`;
-                        } else if (/<｜tool▁call▁begin｜>function<｜tool▁sep｜>(httpGet|http_get|getHttp|get_http)$/gmi.test(stringResponse)) {
-                            let url: string | string[] = Array.from(stringResponse.matchAll(/{\s*?(["']+)url\1[:]+[\s\r\n]*\1(.+)\1/gmi), m => m[2]);
-                            if (Array.isArray(url)) url = url[0];
-                            console.log('It was a tool call tag block for httpGet with this url: ' + url);
-                            stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
-                        }
-                    } else 
-                    // Check it to see if it's python code implementing function calls (sigh!)
-                    // For model: dolphin-2.9.2-qwen2-7b (mainly)
-                    // Check for a httpGet python implementation.
-                    if (/python/gmi.test(stringResponse)
-                     && (/http.*?[\r\n\s]*?.*get[\s]*\(/gmi.test(stringResponse)
-                      || /get[\s]*?\(.*?[\r\n\s]*?.*http/gmi.test(stringResponse))) {
-                        stringResponse = stringResponse.toLocaleLowerCase();
-                        let index = stringResponse.indexOf('http://');
-                        if (index == -1) index = stringResponse.indexOf('https://');
-                        stringResponse = stringResponse.substring(index);
-                        index = stringResponse.indexOf('\'');
-                        if (index == -1) index = stringResponse.indexOf('\"');
-                        let url = stringResponse.substring(0, index);
-                        console.log('It was a python impl for httpGet with this url: ' + url);
-                        stringResponse = `{ "action": "function-call", "name": "httpGet", "arguments": { "url": "${url}"}}`;
-                    } else
-                    // Check it to see if it's python code implementing function calls (sigh!)
-                    // For model: dolphin-2.9.2-qwen2-7b
-                    // Check for a webSearch python implementation.
-                    if (/python/gmi.test(stringResponse)
-                        && (/search[\s]*\(/gmi.test(stringResponse)
-                        || /google.*?[\r\n\s]*?.*search[\s]*\(/gmi.test(stringResponse)
-                        || /search.*?[\r\n\s]*?.*web[\s]*\(/gmi.test(stringResponse))) {
-                        stringResponse = stringResponse.toLocaleLowerCase();
-                        let index = stringResponse.indexOf('\"');
-                        if (index == -1) index = stringResponse.indexOf('\'');
-                        stringResponse = stringResponse.substring(index);
-                        index = stringResponse.indexOf('\"');
-                        if (index == -1) index = stringResponse.indexOf('\'');
-                        let searchQuery = stringResponse.substring(0, index);
-                        if (searchQuery.indexOf('\"')) {
-                            searchQuery = searchQuery.substring(searchQuery.indexOf('\"'));
-                        }
-                        console.log('It was a python impl for webSearch with this searchQuery: ' + searchQuery);
-                        stringResponse = `{ "action": "function-call", "name": "webSearch", "arguments": { "searchQuery": "${searchQuery}"}}`;
-                    } else {
-                        console.log("Don't know what content type is in the message.");
-                    }
+                let normalizedJson = normalizeFunctionCallJson(stringResponse);
+                if (!normalizedJson) {
+                    throw new Error('No valid JSON detected');
                 }
+                stringResponse = normalizedJson;
+
                 let objectMessage = JSON.parse(stringResponse);
                 if (objectMessage.action) {
                     objectMessage.action = objectMessage.action.replace(/\s+/g, '');
@@ -489,14 +524,8 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                     console.log(`Max function call response bytes allowed: ${maxBytes}`);
                     if (functionResult.length > maxBytes) functionResult = functionResult.substring(0, maxBytes);
                     
-                    // Wrap the result in a function-response JSON messsage to send back to the LLM.
-                    let functionResultJson = JSON.stringify(functionResult);
-                    // Peel off single quotes that JSON.stringify() added.
-                    if (functionResultJson.length > 2) {
-                        functionResultJson = functionResultJson.substring(1, functionResultJson.length - 1);
-                    }
-                    let functionResponseJson: string = `{"role":"user","content":"{\\"from\\": \\"function-response\\", `
-                        + `\\"value\\": \\"{\\"status\\": \\"OK\\", \\"message\\": \\"${functionResultJson}\\"}\\"}"}`;
+                    // Build the function response JSON
+                    let functionResponseJson = buildFunctionResponse(functionResult);
 
                     // Recursive call to queryLLM(), but the nested one returns early.
                     console.log(`Saying this to LLM: ${functionResponseJson}`);
@@ -523,9 +552,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
         // Remove the function call junk from the conversation context so behavior goes back to normal.
         let messages = conversationContext.chatMessages;
-        while (messages[messages.length - 1].content.startsWith('{')) {
-            messages.splice(messages.length - 1, 1);
-        }
+        removeTrailingJsonMessages(messages);
         if (webScrape) {
             // Remove the function call system message also.
             messages.splice(messages.length - 2, 1);
@@ -545,9 +572,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
             conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
             console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
 
-            stringResponse = stringResponse.replace(/([\\])/g,'\\$1');
-            // BASH-escape single quote correctly.
-            stringResponse = stringResponse.replace(/(['])/g,'\'\\\'\'');
+            stringResponse = escapeMessageForBash(stringResponse);
         }
 
         //console.log(response); // Uncomment this to see the HTTP response.
