@@ -66,12 +66,23 @@ export class PluginLoader {
     this.pluginDir = pluginDir;
   }
 
+  /**
+   * Loads all plugins from the specified directory and returns an object containing
+   * all plugin functions and members, along with LLM-compatible tools metadata.
+   * @returns {Promise<any>} An object containing plugin functions, members, tools array, and LLM function names.
+   */
   async loadPlugins(): Promise<any> {
     const plugins: any = {};
-    const files = readdirSync(this.pluginDir);
+    let files: string[];
+    try {
+      files = readdirSync(this.pluginDir);
+    } catch (error) {
+      console.error(`PluginLoader: Error reading plugin directory ${this.pluginDir}:`, error);
+      return plugins;
+    }
 
     // tools is function metadata about the exposed plugin functions
-    const tools: { type: string; function: FunctionInfo; }[] = [];
+    const tools: { type: string; function: FunctionInfo }[] = [];
     plugins.tools = tools;
     const llmFunctionNames: string[] = [];
     plugins.llmFunctionNames = llmFunctionNames;
@@ -80,7 +91,7 @@ export class PluginLoader {
       if (!file.endsWith('Plugin.ts')) continue;
       console.log(`Loading plugin: ${file}`);
       const moduleFilename = path.join(this.pluginDir, file);
-      //console.log(`.. from file: ${moduleFilename}`);
+
       let module;
       try {
         module = await import(moduleFilename);
@@ -88,39 +99,40 @@ export class PluginLoader {
         console.error(`PluginLoader: Error importing plugin ${file}:`, error);
         continue;
       }
+
       const pluginClass = module.default;
       if (!pluginClass) {
         console.error(`PluginLoader: No default export found in '${moduleFilename}'`);
         continue;
       }
-      //console.log('pluginClass: ' + pluginClass);
 
-      // Create an instance of the plugin class and use it
-      const pluginInstance = new pluginClass();
+      // Create an instance of the plugin class
+      let pluginInstance;
+      try {
+        pluginInstance = new pluginClass();
+      } catch (error) {
+        console.error(`PluginLoader: Error instantiating plugin ${file}:`, error);
+        continue;
+      }
 
-      // Map all plugin functions to be visible to the application.
+      // Map all plugin functions to be visible to the application
       Object.getOwnPropertyNames(Object.getPrototypeOf(pluginInstance))
-        .filter(prop => prop !== 'constructor')
+        .filter(prop => prop !== 'constructor' && typeof pluginInstance[prop] === 'function')
         .forEach(name => {
-          //console.log('name: ' + name);
-          //console.log('type: ' + typeof pluginInstance[name]);
           plugins[name] = pluginInstance[name].bind(pluginInstance);
         });
 
-      // Map all plugin non-function class members to be visible to the application.
+      // Map all plugin non-function class members to be visible to the application
       Object.getOwnPropertyNames(pluginInstance)
-        .filter(prop => prop !== 'constructor' && prop !== 'function')
+        .filter(prop => prop !== 'constructor' && typeof pluginInstance[prop] !== 'function')
         .forEach(name => {
-          //console.log('name: ' + name);
-          //console.log('type: ' + typeof pluginInstance[name]);
           plugins[name] = pluginInstance[name];
         });
 
       const reader = new JSDocReader([moduleFilename]);
       // JSDocReader will read the plugin's JSDoc comments and modify the
       // tools array to add any LLM functions.
-      reader.getJSDocComments(moduleFilename, tools);
-      //console.log(JSON.stringify(tools));
+      reader.getJSDocComments(moduleFilename, tools, llmFunctionNames);
     }
 
     console.log('PluginLoader: Done loading.');
@@ -132,8 +144,8 @@ interface FunctionInfo {
   name: string | null;
   description: string;
   parameters: {
-    type: "object";
-    properties: {};
+    type: 'object';
+    properties: Record<string, { type: string; description: string }>;
     required: string[];
   };
 }
@@ -141,11 +153,18 @@ interface FunctionInfo {
 class JSDocReader {
   private program: ts.Program;
 
-  constructor(private filePaths: string[]) {
+  constructor(filePaths: string[]) {
     this.program = ts.createProgram(filePaths, {});
   }
 
-  getJSDocComments(filePath: string, tools: { type: string; function: FunctionInfo; }[]) {
+  /**
+   * Extracts JSDoc comments from the specified file and populates the tools and llmFunctionNames arrays.
+   * @param filePath The path to the TypeScript file to process.
+   * @param tools The array to store LLM-compatible function metadata.
+   * @param llmFunctionNames The array to store names of LLM-callable functions.
+   * @returns {FunctionInfo} The last processed function's metadata (for compatibility).
+   */
+  getJSDocComments(filePath: string, tools: { type: string; function: FunctionInfo }[], llmFunctionNames: string[]): FunctionInfo {
     const sourceFile = this.program.getSourceFile(filePath);
     if (!sourceFile) {
       throw new Error(`File ${filePath} not found`);
@@ -153,38 +172,35 @@ class JSDocReader {
 
     let functionInfo: FunctionInfo = {
       name: null,
-      description: "",
-      parameters: { type: "object", properties: {}, required: [] }
+      description: '',
+      parameters: { type: 'object', properties: {}, required: [] },
     };
 
     const visit = (node: ts.Node) => {
       // Uncomment the next line to see a lot of program structure output.
       //console.log(node);
       // Class method and function discovery
-      if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node) ||
-          ts.isJSDocParameterTag(node) && node.name) {
-        const symbol = (this.program.getTypeChecker().getSymbolAtLocation(node.name as ts.PropertyName));
+      if ((ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) && node.name) {
+        const symbol = this.program.getTypeChecker().getSymbolAtLocation(node.name as ts.PropertyName);
         if (symbol) {
-          // Discover method or function JSDoc comment block.
+          // Discover method or function JSDoc comment block
           const comments = ts.displayPartsToString(symbol.getDocumentationComment(this.program.getTypeChecker()));
           if (comments && node.name) {
-            //console.log(comments);
             functionInfo.description = comments;
-            let identifier = node['name'] as ts.Identifier;
-            let methodOrFuncName = identifier.escapedText;
-            let regularStringName = methodOrFuncName.toString();
-            functionInfo.name = regularStringName;
+            const identifier = node.name as ts.Identifier;
+            const methodOrFuncName = identifier.escapedText.toString();
+            functionInfo.name = methodOrFuncName;
           }
 
           // Discover argument parameters JSDoc tags, and any return value JSDoc tag
-          const jsDocTags: ts.JSDocTag[] = (node as any).jsDoc?.flatMap((doc: { tags: any; }) => doc.tags) ?? [];
+          const jsDocTags: ts.JSDocTag[] = (node as any).jsDoc?.flatMap((doc: { tags: any }) => doc.tags) ?? [];
           jsDocTags.forEach(tag => {
             if (ts.isJSDocParameterTag(tag)) {
               // Parameter
               const name = tag.name.getText();
               // It's an optional parameter if the name is bracketed.
               const optional = tag.isBracketed;
-              const type = tag.typeExpression?.getText().replace(/[{}]/g, '');
+              const type = tag.typeExpression?.getText().replace(/[{}]/g, '') || 'any';
               let description = tag.comment?.toString() || '';
               if (optional) {
                 description = `${description} Optional argument.`;
@@ -193,63 +209,49 @@ class JSDocReader {
                 functionInfo.parameters.required.push(name);
               }
               if (type && name) {
-                // Add this parameter to the tools API's list of parameters for this function.
-                const currentProperties = functionInfo.parameters.properties;
-                try {
-                  const newPropObj = new Object(
-                    JSON.parse(`{ "${name}": { "type": "${type}", "description": "${description}"}}`));
-                  functionInfo.parameters.properties = Object.assign(currentProperties, newPropObj);
-                } catch (error) {
-                  console.error(`PluginLoader: Error parsing parameter info for ${name}:`, error);
-                }
-
-                // See if it also has the @llmFunction custom tag.
-                const tagsArray = tag.parent.tags;
-                let llmFunc = false;
-                let t: any;
-                for (t in tagsArray) {
-                  if (tagsArray && tagsArray[t].tagName?.escapedText == 'llmFunction') {
-                    llmFunc = true;
-                    break;
-                  }
-                }
-                if (!llmFunc) {
-                  // We nullify the name so that this function doesn't get
-                  // added to the tools array.
-                  functionInfo.name = null;
-                }
+                (functionInfo.parameters.properties as Record<string, any>)[name] = {
+                  type,
+                  description,
+                };
               } else {
                 const methodOrFuncName = node.name?.getText();
-                console.warn(`${filePath} contains a method or function named '${methodOrFuncName}' `
-                  + `that has a JSDoc @param tag for a parameter that either does not declare its type `
-                  + `or its name.  Due to this, the method or function will not be properly available `
-                  + `to the main program.`);
+                console.warn(
+                  `${filePath} contains a method or function named '${methodOrFuncName}' ` +
+                  `that has a JSDoc @param tag for a parameter that either does not declare its type ` +
+                  `or its name. Due to this, the method or function will not be properly available ` +
+                  `to the main program.`
+                );
               }
             } else if (ts.isJSDocReturnTag(tag)) {
               // Return value
-              //const type = (tag as any).typeExpression?.getText().replace(/[{}]/g, '');
               const returnTagDescription = tag.comment?.toString() || '';
-              const currentDescription = functionInfo.description;
-              functionInfo.description = `${currentDescription} Returns ${returnTagDescription}`;
+              functionInfo.description = `${functionInfo.description} Returns ${returnTagDescription}`;
             }
           });
 
-          if (functionInfo.name !== null) {
-            tools.push({ "type": "function", "function": functionInfo });
+          // Check for @llmFunction tag
+          const hasLlmFunction = jsDocTags.some(tag => 
+            ts.isJSDocTag(tag) && tag.tagName.getText() === 'llmFunction'
+          );
+          if (hasLlmFunction && functionInfo.name !== null) {
+            tools.push({ type: 'function', function: { ...functionInfo } });
+            llmFunctionNames.push(functionInfo.name);
+          } else {
+            functionInfo.name = null;
           }
 
-          // Reset storage for the next method or function.
+          // Reset storage for the next method or function
           functionInfo = {
             name: null,
-            description: "",
-            parameters: { type: "object", properties: {}, required: [] }
+            description: '',
+            parameters: { type: 'object', properties: {}, required: [] },
           };
         }
       }
       ts.forEachChild(node, visit);
     };
-    visit(sourceFile);
 
+    ts.forEachChild(sourceFile, visit);
     return functionInfo;
   }
 }
