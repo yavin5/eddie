@@ -231,7 +231,7 @@ class JSDocReader {
 
           // Check for @llmFunction tag
           const hasLlmFunction = jsDocTags.some(tag => 
-            ts.isJSDocTag(tag) && tag.tagName.getText() === 'llmFunction'
+            tag.tagName.getText() === 'llmFunction'
           );
           if (hasLlmFunction && functionInfo.name !== null) {
             tools.push({ type: 'function', function: { ...functionInfo } });
