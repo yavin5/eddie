@@ -1095,53 +1095,31 @@ GRUB_ENABLE_BLSCFG=true
 
 Prompt: 80s style Hard Rock ballad about Eddie signal bot sailing on the space ship Heart of Gold with an infinite improbability drive and a brain the size of five GPUs, apparently written and performed by Rush.
 
-Heart of Gold Voyage
-
-https://suno.com/song/297fceca-7921-4e33-ac99-e42dd7dd06a3
-
-https://suno.com/song/0be0540f-0f15-43c9-8535-01782f56ac2f
-
-Eddie e o Bot do Signal
-
-https://suno.com/song/c14e533a-22e6-4be4-ac56-302614b9d58c
-
-https://suno.com/song/bc933d2f-6437-4cf6-83d0-935eba2f97e6
+Heart of Gold Voyage<br/>
+https://suno.com/song/297fceca-7921-4e33-ac99-e42dd7dd06a3<br/>
+https://suno.com/song/0be0540f-0f15-43c9-8535-01782f56ac2f<br/>
 
 ### Links
 
-Spectacle server: Open Source AI image generation server
-
+Spectacle server: Open Source AI image generation server<br/>
 https://github.com/yavin5/spectacle
 
-
-signal-cli manpage
-
+signal-cli manpage<br/>
 https://github.com/AsamK/signal-cli/blob/master/man/signal-cli.1.adoc
 
-
-AsamK / signal-cli: A command line interface to operate a Signal client library.  Written in Java and rust, GPL v3 License.  This can be the base layer of Signal bots.  Recommended by GPT-4o on Poe.
-
+AsamK / signal-cli: A command line interface to operate a Signal client library.  Written in Java and rust, GPL v3 License.  This can be the base layer of Signal bots.  Recommended by GPT-4o on Poe.<br/>
 https://github.com/AsamK/signal-cli
 
-
-signal-cli-rest-api: This project doesn't use it, but it looks nice.
-
+signal-cli-rest-api: This project doesn't use it, but it looks nice.<br/>
 https://bbernhard.github.io/signal-cli-rest-api/
 
-
-Simple Signal Bot in BASH (Feb 13, 2020)
-
+Simple Signal Bot in BASH (Feb 13, 2020)<br/>
 https://medium.com/digital-forensics-deep-learning-and-dev/simple-signal-bot-6ce841c7982e
 
-
-NodeJS Docs: child_process
-
-https://nodejs.org/api/child_process.html#class-childprocess
-
+NodeJS Docs: child_process<br/>
+https://nodejs.org/api/child_process.html#class-childprocess<br/>
 https://nodejs.org/api/child_process.html#subprocesskillsignal
 
-
-NodeJS Docs: readline.createInterface
-
+NodeJS Docs: readline.createInterface<br/>
 https://nodejs.org/api/readline.html#readlinepromisescreateinterfaceoptions
 
