@@ -257,7 +257,7 @@ async function handleSlashCommands(message: string, conversationId: string, time
     } else if (msg.startsWith('/help')) {
         await sendMessage(conversationId, 'Commands:\n'
             + '✨ /clear : Clears my conversation memory\n'
-            + '🤷‍♂️ /help  : Show the list of commands\n'
+            + '🤷 / help : Show the list of commands\n'
             + '🌇 /image : Generate an image from a prompt');
         return true;
     } else if (msg.startsWith('/image')) {
@@ -278,7 +278,7 @@ async function handleSlashCommands(message: string, conversationId: string, time
  */
 async function imageCommand(conversationId: string, timestamp: string, prompt: string): Promise<void> {
     // Sanitize senderUuid for filename safety
-    const senderUuid = conversationId.replace(/-/g, 'x').replace(/\\/g, 'y').replace(/=/g, 'z');
+    const senderUuid = conversationId.replace(/-/g, 'x').replace(/\\/g, 'y').replace(/=/g, 'z').replace(/\//g, 'GRP');
     const messageId = timestamp;
     const width = 512;
     const height = 512;
@@ -346,7 +346,7 @@ function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
     return prunedMessages;
 }
 
-// Helper function to clip <think>cot</think> content from LLM response (Deepseek R1)
+// Helper function to clip <think>cot</think> content from LLM response
 function clipThinkTags(response: string): string {
     const lines = response.split(/\r?\n/);
     let found = false;
@@ -449,19 +449,37 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
         // Determine if the LLM should use the web or not (the LLM isn't good at this!)
         let webScrape = false;
+	let webSystemMessage: ChatMessage | null = null;
         if (!recurse && shouldWebScrape(message, conversationContext, conversationId)) {
             webScrape = true;
             console.log('WebScrape mode engaged.');
-            const toolsApi = JSON.stringify(plugins.tools);
+	    const toolsApi = JSON.stringify(plugins.tools);
             const useWebSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
-            conversationContext.chatMessages.push({ role: 'system', content: useWebSystemMessage, images: [] });
+            webSystemMessage = { role: 'system', content: useWebSystemMessage, images: [] };
         }
 
         // Add the user's message to the conversation context
         conversationContext.chatMessages.push({ role: actor, content: message, images: [] });
+        // Build messages for THIS LLM call only (with tools if needed)
+        let llmMessages = [...conversationContext.chatMessages];
+        if (webSystemMessage) {
+            // Insert tools system message RIGHT AFTER the first system message
+            llmMessages.splice(1, 0, webSystemMessage);
+	}
+
+        // Temporarily list the context.
+	console.log("The current context being sent to the LLM:");
+        let count = 0;
+        for (const msg of llmMessages) {
+            console.log(count + ': ' + msg.content.substring(0,150));
+            count++;
+        }
+
+        // Prune only the persistent history
         conversationContext.chatMessages = pruneChatMessages(conversationContext.chatMessages);
         console.log('Context now has (after prune) ' + conversationContext.chatMessages.length + ' messsages.');
-        
+        if (webSystemMessage) console.log('→ Tools system message injected for this turn.');
+
         // Send a POST request to the LLM, sending the message context
         // In case LLM responds with empty string (sometimes), we loop, retrying a little.
         let response = null;
@@ -469,7 +487,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         for (let retryCount = 0; !stringResponse && retryCount < 4; retryCount++) {
             response = await axios.post(llmApiUrl, {
                 model: model,
-                messages: conversationContext.chatMessages,
+                messages: llmMessages,
                 num_ctx: llmModelContextSize,
                 stream: false,
                 keep_alive: "15m"
@@ -552,11 +570,10 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
         // Remove the function call junk from the conversation context so behavior goes back to normal.
         let messages = conversationContext.chatMessages;
-        removeTrailingJsonMessages(messages);
+	removeTrailingJsonMessages(messages);
         if (webScrape) {
-            // Remove the function call system message also.
-            messages.splice(messages.length - 2, 1);
             webScrape = false;
+            // Note: we no longer splice because we never added the web message to the persistent array
             console.log('WebScrape mode disabled.');
         }
 
