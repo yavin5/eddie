@@ -463,8 +463,8 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         // Build messages for THIS LLM call only (with tools if needed)
         let llmMessages = [...conversationContext.chatMessages];
         if (webSystemMessage) {
-            // Insert tools system message RIGHT AFTER the first system message
-            llmMessages.splice(1, 0, webSystemMessage);
+            // Insert tools system message as the first message
+            llmMessages.splice(0, 1, webSystemMessage);
         }
 
         // Temporarily list the context.
@@ -605,7 +605,7 @@ function startNewConversationContext(conversationId: string) {
 
     // Initial system message that always stays at the top of the message context.
     const topSystemMessage = 'Today\'s date and time is: ' + new Date().toISOString() + '\n'
-    + 'If the user asks what today\'s date or time is, just tell them from memory. Greet the user warmly.';
+    + 'Greet the user warmly but never ask how you can help nor what you can do for them.\n';
 
     console.log(topSystemMessage);
     chatMessages.push({ role: 'system', content: topSystemMessage, images: [] });
@@ -638,7 +638,7 @@ function shouldWebScrape(message: string, conversationContext: ConversationConte
         /google[ ]+that/g.test(m))             // no equivalent.
         return true;
     // Phrase patterns..
-    if (/(read|get)+[ ]+th(e|is)[ ]+(web)*[ ]*(site|page)/g.test(m) ||
+    if (/(read|get|download)+[ ]+th(e|is)[ ]+(web)*[ ]*(site|page|link)/g.test(m) ||
         (/leia|lee/g.test(m) && /p[áa]gina/g.test(m) && /web/g.test(m)) ||
         (/list|numbers/g.test(m) && /crypto|nft|token|stock|supply/g.test(m)) ||
         (/indíque|liste/g.test(m) && /cripto|nft|token|acciones|ações|suministro|suprimento/g.test(m))) {
