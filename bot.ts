@@ -32,7 +32,7 @@ let botName = 'Bot';
 
 // Build a system message that contains instructions that are specific to how
 // this bot is meant to operate, specifically around function calling.
-const functionCallSystemMessage1 = 'You are a helpful assistant with access to real-time data from the web using '
+const functionCallSystemMessage1 = 'You are a helpful agent assistant with access to real-time data from the web using '
     + 'the following functions:\n\n  '
 const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONLY in JSON format with:\n\n'
     + '{ \"action\": \"function-call\", \"name\": \"functionName\", \"arguments\": { \"arg_1\": \"value_1\", \"arg_2\": \"value_2\", ... }}\n\n'
@@ -125,7 +125,7 @@ function sendMessage(recipient: string, message: string): void {
     let attachment = '';
     if (messageIsFile) {
         body = ``;
-	attachment = ` --attachment ${message}`;
+        attachment = ` --attachment ${message}`;
     }
     const command = `${signalCliPath} -u ${botPhoneNumber} send ${body} ${recipientCli}${attachment}`;
     console.log(command);
@@ -449,11 +449,11 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
         // Determine if the LLM should use the web or not (the LLM isn't good at this!)
         let webScrape = false;
-	let webSystemMessage: ChatMessage | null = null;
+        let webSystemMessage: ChatMessage | null = null;
         if (!recurse && shouldWebScrape(message, conversationContext, conversationId)) {
             webScrape = true;
             console.log('WebScrape mode engaged.');
-	    const toolsApi = JSON.stringify(plugins.tools);
+            const toolsApi = JSON.stringify(plugins.tools);
             const useWebSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
             webSystemMessage = { role: 'system', content: useWebSystemMessage, images: [] };
         }
@@ -465,10 +465,10 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         if (webSystemMessage) {
             // Insert tools system message RIGHT AFTER the first system message
             llmMessages.splice(1, 0, webSystemMessage);
-	}
+        }
 
         // Temporarily list the context.
-	console.log("The current context being sent to the LLM:");
+        console.log("The current context being sent to the LLM:");
         let count = 0;
         for (const msg of llmMessages) {
             console.log(count + ': ' + msg.content.substring(0,150));
@@ -570,7 +570,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
         // Remove the function call junk from the conversation context so behavior goes back to normal.
         let messages = conversationContext.chatMessages;
-	removeTrailingJsonMessages(messages);
+        removeTrailingJsonMessages(messages);
         if (webScrape) {
             webScrape = false;
             // Note: we no longer splice because we never added the web message to the persistent array
