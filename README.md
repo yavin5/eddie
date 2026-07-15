@@ -1,17 +1,17 @@
-## Eddie Bot
+## Eddie : LLM Agent Over Signal Messenger
 
-Eddie is an AI chatbot that talks over instant messaging, primarily Signal messenger.  Eddie relays messages to an AI model over an OpenAPI-compatible REST API, such as the local one provided by Ollama, and then relays the AI model's reply back to the user over instant messaging.
+Eddie is an AI agent & chatbot that talks over instant messaging: Signal messenger. Eddie relays messages to an AI model over an OpenAPI-compatible REST API endpoint, potentially performs some work by calling tools and/or plugins, and then relays the AI model's completed reply back to the user over instant messaging.
 
 ### Features
 
+- Implements LLM function calling / tool calling in pure Typescript.
+- Agent plugin framework. Includes a web search and scrape plugin, and also a web URL GET plugin function.
 - Multiple separate contact private chats.
 - Multiple group chats.
 - Separate AI chat context per group and per private chat.
-- Implements LLM function calling / tool calling in pure Typescript.
-- Bot / LLM plugin framework.  Includes a web scrape plugin.
-- Image generation via [Spectacle](https://github.com/yavin5/spectacle) server: Currently uses the state of the art Qwen-Image diffusion model.
-- Able to answer or discuss about recent content outside the scope of the LLM's model by web searching and web scraping.
-- Works with Ollama AI runtime and Ollama API
+- `/image` command for text-to-image generation via [Spectacle](https://github.com/yavin5/spectacle) server: Currently uses the Qwen-Image diffusion model.
+- Able to answer or discuss about recent content outside the scope of the LLM model's training data by automatically web searching and web scraping.
+- Supports English, Spanish, and Portuguese. Other languages are easy to add.
 
 ### Technology Stack
 
@@ -21,7 +21,7 @@ Eddie is an AI chatbot that talks over instant messaging, primarily Signal messe
 - Java 21.0.5+: only required by signal-cli
 - axios
 - ollama 0.7.1+
-- Fedora Linux 42+ probably also works well on macos
+- Any Linux that supports the above, developed on Fedora Linux 42+, probably also works without modifications on macos
 - Signal client on desktop or mobile
 - [Spectacle server](https://github.com/yavin5/spectacle) if you want AI image generation also
 
@@ -30,7 +30,7 @@ Eddie is an AI chatbot that talks over instant messaging, primarily Signal messe
 Eddie's code can decide when function calls are necessary to answer the user's question:
 1. Normally Eddie is in answer-only-from-memory mode.
 2. User says something (sends a query to Eddie).
-3. Eddie's code decides if it matches words such as:
+3. Eddie's code decides if it matches words such as the following, in English, Spanish, and Portuguese:
    - search
    - price
    - market cap / market capitalization
@@ -78,7 +78,6 @@ The above procedure works well for some open source models (deepseek coder 2 128
 - Feature: Task manager with user added tasks that run to completion over a long span of time.  Each one of these would take longer, use several times the regular compute, and needs a job ID and job control.
   * Add code to display current status of a numbered job, and have the code continually update that status when possible.
   * Add a new command /stop <jobNumber> and also allow the user to place an emoji on the status to stop the job, maybe also a text reply on the status message of "stop".  Who can stop it?  The user who started it, or any admin user.
-- Feature: Add a date and time function call.
 - Bug fix: If after a function call Eddie responds with {"role":"assistant","content":"something..."}(*throwaway chars after this) then peel the JSON off that and just say the content value. This happens with LLama3.1.
 - Bug fix: If in web scrape mode and the LLM answers with something that isn't a function-call message (a bad choice -- lazy LLM syndrome), the code should retry the LLM query some number of times. Make the number of retries a configuration setting.
 - Feature: Add a cryptocurrency plugin, calling cctx. https://github.com/ccxt/ccxt
