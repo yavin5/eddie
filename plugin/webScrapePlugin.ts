@@ -16,8 +16,8 @@ class WebScrapePlugin {
     }
 
     /**
-     * Uses an HTTP client to perform a web search GET request, and returns the
-     * search results as web response content.
+     * Performs a live internet web search request, and returns the
+     * search results as web response content. Similar to a Google text web search.
      * @llmFunction
      * @param {string} searchQuery The free-form text of a search query request.
      * @returns {string} The search results content containing links of web pages
@@ -119,10 +119,12 @@ class WebScrapePlugin {
     }
 
     /**
-     * Uses an HTTP client to perform an HTTP GET request and returns the scraped web response content.
+     * Uses an HTTP/S client to perform an HTTP GET request of a URL link and returns the
+     * scraped web page response content. This is perfect for reading web pages, downloading
+     * text that appears on a web page, and checking what is currently written on a web page.
      * @llmFunction
-     * @param {string} url The HTTP URL to request
-     * @returns {string} The HTTP response content
+     * @param {string} url The HTTP/S URL link to the web page you want to read
+     * @returns {string} The HTTP response text content, which is what is written on the web page / link / url
      */
     async httpGet(url: string): Promise<string> {
         // TODO: Handle HTTP sessions (some sites break if no cookies are returned)

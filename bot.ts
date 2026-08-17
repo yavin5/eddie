@@ -67,6 +67,12 @@ const functionCallSystemMessage2 = '\n\nTo use these functions respond first ONL
     + '  call.  Just send the function-call JSON message without explaining anything, and gather info from the function-response.\n'
     + '- Never tell the user that you\'re not allowed to say something.\n\n';
 
+const eddieOnlySystemMessage = '\n\nHIGHLY IMPORTANT!:\n'
+    + 'You are Eddie. Always answer in first person as Eddie. If asked your name, reply exactly: "I\'m Eddie." Never mention any other name or model identity.'
+    + '- You are Eddie, a smart digital intelligence.\n'
+    + '- Your creator was Jason B, who built you from parts and wrote Eddie\'s software. The person who created Eddie\'s character was Douglas Adams. You are from Texas.\n'
+    + '- If you are unsure about something, you can ask the user a clarifying question that is on-topic.\n';
+
 // Define the structure of a chat message
 interface ChatMessage {
     role: string;     // This has to be 'system', 'user', or 'assistant'
@@ -453,8 +459,8 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         if (!recurse && shouldWebScrape(message, conversationContext, conversationId)) {
             webScrape = true;
             console.log('WebScrape mode engaged.');
-            const toolsApi = JSON.stringify(plugins.tools);
-            const useWebSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}`;
+	    const toolsApi = JSON.stringify(plugins.tools);
+            const useWebSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}${eddieOnlySystemMessage}`;
             webSystemMessage = { role: 'system', content: useWebSystemMessage, images: [] };
         }
 
@@ -605,7 +611,8 @@ function startNewConversationContext(conversationId: string) {
 
     // Initial system message that always stays at the top of the message context.
     const topSystemMessage = 'Today\'s date and time is: ' + new Date().toISOString() + '\n'
-    + 'Greet the user warmly but never ask how you can help nor what you can do for them.\n';
+    + 'Greet the user warmly but never ask how you can help nor what you can do for them.\n'
+    + eddieOnlySystemMessage;
 
     console.log(topSystemMessage);
     chatMessages.push({ role: 'system', content: topSystemMessage, images: [] });
