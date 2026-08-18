@@ -3,7 +3,7 @@ import { QwenImageGenerator, ImageGenerationResult } from './spectacle-image-cli
 import axios from 'axios';
 import { parse } from 'best-effort-json-parser';
 import dotenv from 'dotenv';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import readline from 'readline';
 import path from 'path';
 import * as fs from 'fs/promises';
@@ -119,32 +119,29 @@ function getBotName(): Promise<string> {
     });
 }
 
-// Send a message via signal-cli
-function sendMessage(recipient: string, message: string): void {
+// Send a message via signal-cli.
+// Uses execFile with an argument array so recipient and message content are
+// never parsed by a shell (which prevents command injection).
+function sendMessage(recipient: string, message: string, isAttachment: boolean = false): void {
     let recipientCli: string = recipient;
+    let groupFlag: string | null = null;
     if (recipient.endsWith('=')) {
-        recipientCli = `-g ${recipientCli}`;
+        groupFlag = '-g';
     }
-    // If the message is a file path / filename then send that file.
-    let messageIsFile = message.startsWith('/');
-    let body = `-m '${message}'`;
-    let attachment = '';
-    if (messageIsFile) {
-        body = ``;
-        attachment = ` --attachment ${message}`;
+    let args: string[] = ['-u', botPhoneNumber, 'send'];
+    if (groupFlag) args.push(groupFlag);
+    if (isAttachment) {
+        // The message is a file path / filename, so send it as an attachment.
+        args.push('--attachment', message);
+    } else {
+        args.push('-m', message);
     }
-    const command = `${signalCliPath} -u ${botPhoneNumber} send ${body} ${recipientCli}${attachment}`;
-    console.log(command);
-    exec(command);
-}
-
-// Helper function to safely escape message content for bash single-quoted string
-function escapeMessageForBash(message: string): string {
-    // Double backslashes first
-    let escaped = message.replace(/([\\])/g, '\\$1');
-    // Escape single quotes as '\'' 
-    escaped = escaped.replace(/(['])/g, '\'\\\'\'');
-    return escaped;
+    args.push(recipientCli);
+    console.log(`${signalCliPath} ${args.join(' ')}`);
+    const child = execFile(signalCliPath, args);
+    child.on('error', (error: Error) => {
+        console.error(`Error sending message: ${error}`);
+    });
 }
 
 // Helper function to extract content after bot mention for slash command handling
@@ -302,7 +299,7 @@ async function imageCommand(conversationId: string, timestamp: string, prompt: s
     if (result.status === 'success') {
         const imagePath = result.imagePath;
         console.log(`Image generated successfully: ${imagePath}`);
-        await sendMessage(conversationId, path.join("/home/jasonb/git/image-server", imagePath));
+        await sendMessage(conversationId, path.join("/home/jasonb/git/image-server", imagePath), true);
 	await new Promise((r) => setTimeout(r, 7000));
         try {
             await fs.unlink(imagePath);
@@ -594,8 +591,6 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
             // Add the LLM's response to the conversation context
             conversationContext.chatMessages.push({ role: 'assistant', content: stringResponse, images: [] });
             console.log('Context now has ' + conversationContext.chatMessages.length + ' messsages.');
-
-            stringResponse = escapeMessageForBash(stringResponse);
         }
 
         //console.log(response); // Uncomment this to see the HTTP response.
