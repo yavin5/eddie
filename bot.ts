@@ -1,4 +1,4 @@
-import { PluginLoader } from './plugin/pluginLoader';
+import { PluginLoader, LoadedPlugins } from './plugin/pluginLoader';
 import { QwenImageGenerator, ImageGenerationResult } from './spectacle-image-client';
 import axios from 'axios';
 import { parse } from 'best-effort-json-parser';
@@ -50,20 +50,12 @@ interface LlmMessage {
 }
 
 /**
- * The loaded plugins object emitted by PluginLoader. We only model what the
- * bot actually consumes: the `tools` array (for the LLM's tool-call schema) and
- * a per-method callable map. This is what lets the global `plugins` variable be
- * typed instead of `any`.
+ * The loaded plugins object emitted by PluginLoader (see the `LoadedPlugins`
+ * interface in `plugin/pluginLoader.ts`), which carries the `tools` array used
+ * for the LLM's tool-call schema and a per-method callable map. Importing the
+ * shared interface here keeps `plugins` typed instead of `any`.
  */
-interface PluginCollection {
-    /** The LLM tool-call schemas (as OpenAI function definitions). Empty array
-     *  before the loader has populated it. */
-    tools: any[];
-    /** Any plugin method name maps to its callable function. Used in
-     *  `invokeLlmFunction` to dispatch `plugins[functionName](...args)`. */
-    [methodName: string]: any;
-}
-let plugins: PluginCollection = { tools: [] };
+let plugins: LoadedPlugins = { tools: [], llmFunctionNames: [] };
 
 // Update this path to where signal-cli is installed
 const signalCliPath = process.env.SIGNAL_CLI_PATH!;
