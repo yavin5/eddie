@@ -28,6 +28,7 @@ Uses `dotenv`. Required env vars (loaded in `bot.ts`):
 | `EDDIE_ADMIN_0` | Admin phone number |
 | `PLUGIN_WEBSCRAPE_BRAVE_SEARCH_KEY` | Brave Search API key |
 | `LLM_FUNCTION_RESPONSE_MAX_BYTES` | Max bytes for a single function response (default 280000) |
+| `IMAGE_SERVER_DIR` | Optional: directory where Signal image attachments are saved before being sent to the LLM (default `../image-server`) |
 
 ## Plugin System
 
@@ -45,11 +46,12 @@ Uses `dotenv`. Required env vars (loaded in `bot.ts`):
 - Context pruning happens in `pruneChatMessages()` — keeps system message + most recent messages below the context token limit
 - Web scrape mode is triggered by keyword matching in `shouldWebScrape()` (English/Spanish/Portuguese), not by the LLM
 - Function call responses are clipped to `LLM_FUNCTION_RESPONSE_MAX_BYTES` bytes before being sent back to the LLM
-- `<think>` tags from thinnking models are clipped in `clipThinkTags()`
+- `<think>` tags from thinking models are clipped in `clipThinkTags()`
+- Image vision: incoming Signal image attachments are fetched with `signal-cli fetchAttachment`, saved under `imageServerDir` (`IMAGE_SERVER_DIR` env var, default `../image-server`), MIME-detected by magic bytes, and inlined into the LLM request as `image_url` data-URL content parts (OpenAI-compatible multi-modal messages) via `buildMessageContent()`/`fetchAttachment()`/`imageFileToDataUrl()` in `bot.ts`
 
 ## Key Gotchas
 
-- **Typing the LLM/Signal types (status)**: The old `any`s in `bot.ts` are replaced by the interfaces `LlmContentPart`, `LlmMessage`, `LlmRequest`, `SignalDataMessage`, `SignalEnvelope`, `PluginCallMessage`, and `PluginCollection` (top of `bot.ts`; `LlmContentPart`/`SignalEnvelope` are exported). Remaining intentional `any`: `PluginCollection.tools: any[]` and its method index-signature, and the `SignalDataMessage`/`Envelope` escape index-signatures (for unmodeled fields). `buildMessageContent` returns `LlmContentPart[]`; `buildLlmMessages` returns `LlmMessage[]`; the LLM POST body is `LlmRequest`; `handleMessage`/`processQueuedMessages`/the receive queue use `SignalEnvelope`; `invokeLlmFunction` takes a `PluginCallMessage` with `funcArgs: string[]`. Any new `any` should be replaced with one of these (or a new typed interface) rather than left implicit.
+- **Typing the LLM/Signal types (status)**: The old `any`s in `bot.ts` are replaced by the interfaces `LlmContentPart`, `LlmMessage`, `LlmRequest`, `SignalDataMessage`, `SignalEnvelope`, `PluginCallMessage` (top of `bot.ts`; the loader exposes the matching `LoadedPlugins` interface in `plugin/pluginLoader.ts`; `LlmContentPart`/`SignalEnvelope` are exported). Remaining intentional `any`: the plugins object's `tools: any[]` and method index-signature, and the `SignalDataMessage`/`SignalEnvelope` escape index-signatures (for unmodeled fields). `buildMessageContent` returns `LlmContentPart[]`; `buildLlmMessages` returns `LlmMessage[]`; the LLM POST body is `LlmRequest`; `handleMessage`/`processQueuedMessages`/the receive queue use `SignalEnvelope`; `invokeLlmFunction` takes a `PluginCallMessage` with `funcArgs: string[]`. Any new `any` should be replaced with one of these (or a new typed interface) rather than left implicit.
 - No lint or test framework beyond `npm test`; verify changes with `npm test` and `npm run typecheck`
 - `tsconfig.json` has `strict: true` but no `outDir` — compiled output goes alongside source
 - Image generation (`/image` command) talks to a separate Spectacle server at `../image-server` (relative to eddie)
