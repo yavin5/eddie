@@ -10,6 +10,7 @@ Eddie is an AI agent & chatbot that talks over instant messaging: Signal messeng
 - Multiple group chats.
 - Separate AI chat context per group and per private chat.
 - `/image` command for text-to-image generation via [Spectacle](https://github.com/yavin5/spectacle) server: Currently uses the Qwen-Image diffusion model.
+- Image vision: send image attachments over Signal (private chat or group, with or without text) and Eddie inlines them as base64 data-URLs into the (vision model's) chat context, so the LLM can see and describe them. Requires a vision-capable LLM model.
 - Able to answer or discuss about recent content outside the scope of the LLM model's training data by automatically web searching and web scraping.
 - Supports English, Spanish, and Portuguese. Other languages are easy to add.
 
@@ -98,6 +99,7 @@ The above procedure works well for some open source models (deepseek coder 2 128
 
 #### Done, Implemented Changes
 
+- Feature: Send image attachments (from private chats or groups, with or without accompanying text) through to a vision-capable LLM: image attachments arrive via `dataMessage.attachmentUris`, are fetched with `signal-cli fetchAttachment`, saved to disk, detected by MIME/magic bytes, encoded as base64 data-URLs, and inlined as multi-modal `image_url` content parts so the model can see them.
 - Feature: Add the capability of generating images using the Spectacle image server.
 - Adjusted context size in bytes, allow user to config context size in *tokens*.
 - Rewrites LLM-written deepseek XML code snippets that represent function calls.

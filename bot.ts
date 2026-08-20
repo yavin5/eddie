@@ -3,14 +3,65 @@ import { QwenImageGenerator, ImageGenerationResult } from './spectacle-image-cli
 import axios from 'axios';
 import { parse } from 'best-effort-json-parser';
 import dotenv from 'dotenv';
-import { exec, execFile } from 'child_process';
-import readline from 'readline';
+import { exec, execFile } from 'node:child_process';
+import readline from 'node:readline';
 import path from 'path';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 
 dotenv.config();
 
-let plugins: any = undefined;
+// Persistent directory where image attachments received from Signal are
+// saved to disk before being encoded for the LLM. Matches the directory
+// already referenced by imageCommand().
+const imageServerDir = path.resolve(__dirname, '../image-server');
+
+/**
+ * One element of the OpenAI-compatible multi-modal `content` array we send to
+ * the LLM API. Modeled here (instead of `any`) so `buildMessageContent` and
+ * `buildLlmMessages` have a concrete return type.
+ */
+export interface LlmContentPart {
+    /** The part type. Must be either "text" or "image_url". */
+    type: string;
+    /** The plain-text payload; only present when type === "text". */
+    text?: string;
+    /** The image_url payload; only present when type === "image_url". */
+    image_url?: { url: string };
+}
+
+/**
+ * The `content` field of an LLM chat message: either plain text, or an array
+ * of LlmContentParts (text + base64 image attachments).
+ */
+type LlmContent = string | LlmContentPart[];
+
+/**
+ * A single message as sent in the OpenAI-compatible chat completions request
+ * body (the shape `buildLlmMessages` emits).
+ */
+interface LlmMessage {
+    /** The sender's role. "system", "user", or "assistant". */
+    role: string;
+    /** The message content, text or multi-modal. */
+    content: LlmContent;
+}
+
+/**
+ * The loaded plugins object emitted by PluginLoader. We only model what the
+ * bot actually consumes: the `tools` array (for the LLM's tool-call schema) and
+ * a per-method callable map. This is what lets the global `plugins` variable be
+ * typed instead of `any`.
+ */
+interface PluginCollection {
+    /** The LLM tool-call schemas (as OpenAI function definitions). Empty array
+     *  before the loader has populated it. */
+    tools: any[];
+    /** Any plugin method name maps to its callable function. Used in
+     *  `invokeLlmFunction` to dispatch `plugins[functionName](...args)`. */
+    [methodName: string]: any;
+}
+let plugins: PluginCollection = { tools: [] };
 
 // Update this path to where signal-cli is installed
 const signalCliPath = process.env.SIGNAL_CLI_PATH!;
@@ -157,14 +208,14 @@ function extractContentAfterBotMention(content: string, botName: string): string
 }
 
 // Handle incoming messages
-async function handleMessage(botName: string, envelope: any): Promise<void> {
+async function handleMessage(botName: string, envelope: SignalEnvelope): Promise<void> {
     //if (envelope == null) return;
-    const sender = envelope.source;
-    const senderUuid = envelope.sourceUuid
-    const dataMessage = envelope.dataMessage || '';
-    const groupInfo = dataMessage.groupInfo || '';
+    const sender = envelope.source || '';
+    const senderUuid = envelope.sourceUuid || '';
+    const dataMessage = (envelope.dataMessage ?? {}) as SignalDataMessage;
+    const groupInfo = dataMessage.groupInfo || {};
     const groupId = dataMessage.groupInfo?.groupId || '';
-    const content = dataMessage.message || '';
+    let content = dataMessage.message || '';
     const timestamp = dataMessage.timestamp || '0';
 
     console.log('handleMessage');
@@ -173,6 +224,18 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
     console.log(`groupId: ${groupId}`);
     //console.log(`content: ${content}`);
 
+    // Fetch any image attachments from this message, so they can be seen by the LLM.
+    let imagePaths: string[] = [];
+    if (dataMessage && dataMessage.attachmentUris && dataMessage.attachmentUris.length > 0) {
+        try {
+            imagePaths = await fetchAttachmentImages(dataMessage);
+        } catch (e) {
+            console.log(`Failed to fetch attachments: ${e}`);
+        }
+    }
+    if (!content.trim() && imagePaths.length > 0) {
+        content = 'The user sent you image(s) with no caption. Take a good look.';
+    }
     if (administrators.has(sender)) {
         // FIXME: Accomodate messages that start with @BotName | BotName | ' '
         if (content.startsWith('/admin ')) {
@@ -197,16 +260,16 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
         // Check to see if it was a mention of the bot.
         let handledByMention = false;
         if (dataMessage.mentions) {
-            const mention = dataMessage.mentions.find((mention: any) =>
+            const mention = dataMessage.mentions.find((mention) =>
                 mention.number === botPhoneNumber ||
                 mention.uuid === botPhoneNumber);
-            if (mention) {
+            if (mention || imagePaths.length > 0) {
                 // Handle any slash commands.
                 const handled = await handleSlashCommands(content, groupId, timestamp);
                 if (handled) return;
 
                 console.log(`Saying this to LLM: ` + content);
-                const response = await queryLLM('user', content, groupId, false);
+                const response = await queryLLM('user', content, groupId, false, imagePaths);
                 console.log(`Response from LLM : ` + response);
                 sendMessage(groupId, response);
                 handledByMention = true;
@@ -218,13 +281,14 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
             // Check to see if the bot's name is on the front of the message,
             // or @BotName (a plain text mention) is in the message somewhere.
             if (content.toLowerCase().startsWith(botName.toLowerCase()) ||
-                content.toLowerCase().includes('@' + botName.toLowerCase())) {
+                content.toLowerCase().includes('@' + botName.toLowerCase()) ||
+                imagePaths.length > 0) {
                 // Handle any slash commands.
                 const handled = await handleSlashCommands(content, groupId, timestamp);
                 if (handled) return;
 
                 console.log(`Saying this to LLM: ` + content);
-                const response = await queryLLM('user', content, groupId, false);
+                const response = await queryLLM('user', content, groupId, false, imagePaths);
                 console.log(`Response from LLM : ` + response);
                 sendMessage(groupId, response);
             }
@@ -237,7 +301,7 @@ async function handleMessage(botName: string, envelope: any): Promise<void> {
             if (handled) return;
 
             console.log(`Saying this to LLM: ` + content);
-            const response = await queryLLM('user', content, senderUuid, false);
+            const response = await queryLLM('user', content, senderUuid, false, imagePaths);
             console.log(`Response from LLM : ` + response);
             sendMessage(sender, response);
         }
@@ -266,8 +330,8 @@ async function handleSlashCommands(message: string, conversationId: string, time
     } else if (msg.startsWith('/image')) {
         const prompt = msg.substring('/image'.length).trim();
         imageCommand(conversationId, timestamp, prompt);
-	await sendMessage(conversationId, '🛠️  Ok, queued your image for generation. It may take up to 6 minutes..');
-	return true;
+        await sendMessage(conversationId, '🛠️  Ok, queued your image for generation. It may take up to 6 minutes..');
+        return true;
     }
     return false;
 }
@@ -297,22 +361,25 @@ async function imageCommand(conversationId: string, timestamp: string, prompt: s
     );
 
     if (result.status === 'success') {
-        const imagePath = result.imagePath;
+        const imagePath = result.imagePath.startsWith('spectacle/')
+            ? path.join(imageServerDir, result.imagePath.slice('spectacle/'.length))
+            : path.join(imageServerDir, result.imagePath);
         console.log(`Image generated successfully: ${imagePath}`);
-        await sendMessage(conversationId, path.join("/home/jasonb/git/image-server", imagePath), true);
-	await new Promise((r) => setTimeout(r, 7000));
+        await sendMessage(conversationId, imagePath, true);
+        await new Promise((r) => setTimeout(r, 7000));
         try {
             await fs.unlink(imagePath);
-        } catch (error: any) {
-            if (error.code === 'ENOENT') {
+        } catch (error) {
+            const err = error as NodeJS.ErrnoException;
+            if (err.code === 'ENOENT') {
                 console.error(`File ${imagePath} does not exist.`);
             } else {
-                console.error(`Error deleting file ${imagePath}:`, error.message);
+                console.error(`Error deleting file ${imagePath}:`, err.message);
             }
         }
     } else {
         console.error(`Error generating image: ${result.message}`);
-	await sendMessage(conversationId, "😵‍💫 Error creating image. Sorry!");
+        await sendMessage(conversationId, "😵‍💫 Error creating image. Sorry!");
     }
 }
 
@@ -437,8 +504,225 @@ function removeTrailingJsonMessages(messages: ChatMessage[]): void {
     }
 }
 
-// Query the local LLM runtime
-async function queryLLM(actor: string, message: string, conversationId: string, recurse: boolean): Promise<string> {
+//----------------------------------------------------------------------------
+// Image-vision helpers
+//----------------------------------------------------------------------------
+
+/**
+ * Detect the MIME type and file extension of an image file by inspecting its
+ * first few magic bytes. Supports PNG, JPEG, GIF, BMP, and WebP.
+ * @param {Buffer} buffer A Buffer containing at least the first 12 bytes of the file.
+ * @return {{ mime: string, ext: string } | null} The detected MIME type and file
+ *   extension, or null if the buffer is not a recognized image format.
+ */
+export function detectImageMimeExt(buffer: Buffer): { mime: string, ext: string } | null {
+    if (!buffer || buffer.length < 4) return null;
+    // PNG: 89 50 4E 47
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+        return { mime: 'image/png', ext: '.png' };
+    }
+    // JPEG: FF D8 FF
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+        return { mime: 'image/jpeg', ext: '.jpg' };
+    }
+    // GIF: 'G' 'I' 'F' '8'
+    if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) {
+        return { mime: 'image/gif', ext: '.gif' };
+    }
+    // BMP: 'B' 'M'
+    if (buffer[0] === 0x42 && buffer[1] === 0x4D) {
+        return { mime: 'image/bmp', ext: '.bmp' };
+    }
+    // WebP: 'R' 'I' 'F' 'F' at 0, 'W' 'E' 'B' 'P' at 8
+    if (buffer.length >= 12 && buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46
+        && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) {
+        return { mime: 'image/webp', ext: '.webp' };
+    }
+    return null;
+}
+
+/**
+ * Strips a leading JSON metadata line from a signal-cli getAttachment stdout
+ * buffer, if present. Signal-cli sometimes emits a JSON header before the
+ * raw file bytes.
+ * @param {Buffer} buf The raw stdout buffer from signal-cli getAttachment.
+ * @return {Buffer} A new Buffer containing only the file bytes.
+ */
+export function stripPossibleJsonHeader(buf: Buffer): Buffer {
+    // If the buffer starts with '{', it's a JSON header line.
+    if (buf.length > 0 && buf[0] === 0x7B /* '{' */) {
+        const newLine = buf.indexOf(0x0A); // \n
+        if (newLine !== -1) {
+            // The rest should start with either a JSON object (another header)
+            // or a known magic-byte image. We try the image magic first.
+            const rest = buf.subarray(newLine + 1);
+            if (detectImageMimeExt(rest)) return rest;
+            // If we can't detect image magic, still strip the first JSON line.
+        }
+    }
+    return buf;
+}
+
+/**
+ * Returns true if the buffer begins with recognized image magic bytes.
+ * @param {Buffer} buffer The buffer to test.
+ * @return {boolean} True if the buffer is a recognized image file.
+ */
+export function isRecognizedImage(buffer: Buffer): boolean {
+    return detectImageMimeExt(buffer) !== null;
+}
+
+/**
+ * Constructs an OpenAI-compatible multi-modal content array from a message
+ * and its base64-encoded image files. All image files are attached after the
+ * text portion. If a ChatMessage's `images` field is empty, an empty array is
+ * returned so the caller can fall back to string content.
+ * @param {string} text The message text.
+ * @param {string[]} imagePaths Array of absolute file paths to image files.
+ * @return {any[]} Array of content objects formatted for OpenAI-compatible
+ *   endpoints, or an empty array when `imagePaths` is empty.
+ * @throws Will throw if any image file cannot be read or base64-encoded.
+ */
+export function buildMessageContent(text: string, imagePaths: string[]): LlmContentPart[] {
+    if (imagePaths.length === 0) return [];
+    const content: LlmContentPart[] = [
+        { type: 'text', text: text }
+    ];
+    for (const imgPath of imagePaths) {
+        const buf = fsSync.readFileSync(imgPath);
+        const detected = detectImageMimeExt(buf.subarray(0, 12));
+        if (!detected) {
+            throw new Error(`buildMessageContent: unrecognized image at ${imgPath}`);
+        }
+        content.push({
+            type: 'image_url',
+            image_url: { url: `data:${detected.mime};base64,${buf.toString('base64')}` }
+        });
+    }
+    return content;
+}
+
+/**
+ * Encodes an image file at the given path into a base64 data URL of the form
+ * `data:image/png;base64,...`. The detected MIME type is appended; if detection
+ * fails the file path is still used and the caller must validate the file.
+ * @param {string} imgPath Absolute file path to the image file.
+ * @return {string} The data URL string.
+ */
+export function imageFileToDataUrl(imgPath: string): string {
+    const buf = fsSync.readFileSync(imgPath);
+    const detected = detectImageMimeExt(buf);
+    const mime = detected ? detected.mime : 'image/png';
+    return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
+/**
+ * Fetches a single Signal attachment via signal-cli getAttachment, saves it to
+ * the image server directory, and returns the saved file path. The file is
+ * named with a timestamp to prevent collisions.
+ * @param {string} attachmentId The attachment UUID from the envelope.
+ * @param {string} recipient The recipient UUID (for direct messages).
+ * @param {string} groupId The group UUID (for group messages).
+ * @param {number} [index=0] An optional index to vary the filename.
+ * @return {Promise<string>} The absolute path of the saved image file.
+ * @throws Will throw if signal-cli exits non-zero or the buffer is not a
+ *   recognized image.
+ */
+export async function fetchAttachment(attachmentId: string, recipient: string, groupId: string, index: number = 0): Promise<string> {
+    const args: string[] = ['getAttachment', '--id', attachmentId];
+    if (groupId) args.push('-g', groupId);
+    else args.push('--recipient', recipient);
+
+    const { stdout, stderr, code } = await new Promise<{ stdout: Buffer, stderr: Buffer, code: number }>((resolve, reject) => {
+        execFile(signalCliPath, args, {
+            maxBuffer: 512 * 1024 * 1024, // 512 MB
+            encoding: 'buffer'
+        }, (error, sOut: Buffer, sErr: Buffer) => {
+            if (error) {
+                const err = error as NodeJS.ErrnoException & { killed: boolean; };
+                if (err.killed) reject(new Error('signal-cli getAttachment timed out'));
+                else reject(new Error(`signal-cli getAttachment exited with code ${err.code}: ${err.message}${sErr ? ' ' + sErr.toString('utf8') : ''}`));
+            } else {
+                resolve({ stdout: sOut, stderr: sErr, code: 0 });
+            }
+        });
+    });
+
+    const raw = stripPossibleJsonHeader(stdout);
+    const detected = detectImageMimeExt(raw);
+    if (!detected) {
+        throw new Error('fetchAttachment: response is not a recognized image; ' + (() => { try { return JSON.parse(stdout.toString('utf8')).message; } catch { return `first bytes: ${[...raw.subarray(0, 20)].map(b => '0x' + b.toString(16)).join(' ')}`; } })());
+    }
+
+    const filePath = path.join(imageServerDir, `attachment_${Date.now()}_${index || 0}.${detected.ext.replace('.', '')}`);
+    fsSync.writeFileSync(filePath, raw);
+    console.log(`Fetched attachment ${attachmentId} → ${filePath} (${raw.length} bytes, ${detected.mime})`);
+    return filePath;
+}
+
+/**
+ * Fetches all attachments from a Signal dataMessage envelope and saves them to
+ * the image server directory. Skips non-image attachments silently.
+ * @param {any} dataMessage The dataMessage object from the envelope.
+ * @return {Promise<string[]>} Array of absolute paths to saved image files.
+ */
+export async function fetchAttachmentImages(dataMessage: SignalDataMessage): Promise<string[]> {
+    const attachmentUris: ({ id?: string; uuid?: string } | string)[] = dataMessage?.attachmentUris as ({ id?: string; uuid?: string } | string)[] || [];
+    const recipient: string | undefined = (typeof dataMessage?.recipient === 'string' ? dataMessage.recipient : (dataMessage?.recipient as { uuid?: string })?.uuid) ?? (dataMessage?.groupId as string | undefined);
+    const groupId: string | undefined = dataMessage?.group?.groupId ?? (dataMessage?.groupId as string | undefined);
+    console.log(`Message ${recipient || groupId} has ` + attachmentUris.length + ' attachments.');
+    const fullPaths: string[] = [];
+    for (let i = 0; i < attachmentUris.length; i++) {
+        const uri = attachmentUris[i];
+        if (!uri || typeof uri !== 'object') continue;
+        const attId: string | undefined = uri.id || uri.uuid;
+        if (!attId) continue;
+        try {
+            const filePath = await fetchAttachment(attId, recipient || '', groupId || '', i);
+            fullPaths.push(filePath);
+        } catch (e) {
+            console.log(`Failed to fetch attachment ${attId}: ${e}`);
+        }
+    }
+    return fullPaths;
+}
+
+/**
+ * Builds the LLM messages array by transforming ChatMessage entries into
+ * OpenAI-compatible shape. Entries with images get a multi-modal content
+ * array; text-only entries get plain string content.
+ * @param {ChatMessage[]} chatMessages The array of ChatMessage objects to transform.
+ * @return {any[]} Array of LLM message objects ready for the API request body.
+ */
+export function buildLlmMessages(chatMessages: ChatMessage[]): LlmMessage[] {
+    return chatMessages.map(msg => {
+        let content: LlmContent = msg.content;
+        if (msg.images && msg.images.length > 0) {
+            content = buildMessageContent(msg.content, msg.images);
+        }
+        return { role: msg.role, content: content };
+    });
+}
+
+//----------------------------------------------------------------------------
+// LLM query
+//----------------------------------------------------------------------------
+
+/**
+ * Sends a message (or context) to the LLM and returns the text response.
+ * Handles web-scrape mode, function-call retry loop, recursion for tool
+ * results, and optional image attachments passed via `imagePaths`.
+ * @param {string} actor The role label for this turn — 'user' or 'assistant'.
+ * @param {string} message The text content of the message to send. May be empty
+ *   when only images are provided.
+ * @param {string} conversationId The conversation key (sender UUID or group ID).
+ * @param {boolean} [recurse=false] True if this call is a nested function-call
+ *   continuation (skips certain post-processing steps).
+ * @param {string[]} [imagePaths=[]] Optional array of absolute file paths to
+ *   image files to attach to this turn's message.
+ * @return {Promise<string>} The LLM's text response.
+ */
+async function queryLLM(actor: string, message: string, conversationId: string, recurse: boolean, imagePaths: string[] = []): Promise<string> {
     try {
         const model = llmModel;
 
@@ -456,13 +740,13 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         if (!recurse && shouldWebScrape(message, conversationContext, conversationId)) {
             webScrape = true;
             console.log('WebScrape mode engaged.');
-	    const toolsApi = JSON.stringify(plugins.tools);
+                const toolsApi = JSON.stringify(plugins.tools);
             const useWebSystemMessage = `${functionCallSystemMessage1}${toolsApi}${functionCallSystemMessage2}${eddieOnlySystemMessage}`;
             webSystemMessage = { role: 'system', content: useWebSystemMessage, images: [] };
         }
 
         // Add the user's message to the conversation context
-        conversationContext.chatMessages.push({ role: actor, content: message, images: [] });
+        conversationContext.chatMessages.push({ role: actor, content: message, images: imagePaths });
         // Build messages for THIS LLM call only (with tools if needed)
         let llmMessages = [...conversationContext.chatMessages];
         if (webSystemMessage) {
@@ -488,14 +772,15 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
         let response = null;
         let stringResponse = '';
         for (let retryCount = 0; !stringResponse && retryCount < 4; retryCount++) {
-            response = await axios.post(llmApiUrl, {
+            const request: LlmRequest = {
                 model: model,
-                messages: llmMessages,
+                messages: buildLlmMessages(llmMessages),
                 num_ctx: llmModelContextSize,
                 stream: false,
                 keep_alive: "15m"
-            });
-            stringResponse = response.data.message.content;
+            };
+            response = await axios.post(llmApiUrl, request);
+            stringResponse = response.data.choices?.[0]?.message?.content ?? '';
         }
         console.log(`LLM response: ${stringResponse}`);
 
@@ -516,7 +801,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 }
                 stringResponse = normalizedJson;
 
-                let objectMessage = JSON.parse(stringResponse);
+                let objectMessage: PluginCallMessage = JSON.parse(stringResponse);
                 if (objectMessage.action) {
                     objectMessage.action = objectMessage.action.replace(/\s+/g, '');
                     objectMessage.action = objectMessage.action.replace(/--+/g, '-');
@@ -649,11 +934,106 @@ function shouldWebScrape(message: string, conversationContext: ConversationConte
     return false;
 }
 
-async function invokeLlmFunction(objectMessage: any, conversationId: string): Promise<string> {
+/**
+ * The envelope object emitted by `signal-cli receive --output=json`, as we
+ * consume it. We only read the fields listed here; unknown fields are ignored,
+ * so the shape stays minimal and the `any` in `handleMessage` goes away.
+ */
+/**
+ * The `dataMessage` payload inside a Signal envelope, as emitted by
+ * signal-cli's receive command. Modeled (instead of `any`) so `handleMessage`
+ * can be typed end-to-end.
+ */
+interface SignalDataMessage {
+    /** Message text (newer signal-cli field name). Defaults to undefined. */
+    text?: string;
+    /** Message text (older signal-cli field name, still emitted). Defaults
+     *  to undefined. */
+    message?: string;
+    /** Unix epoch milliseconds. Used to inject timestamp context into the
+     *  LLM prompt. Defaults to undefined. */
+    timestamp?: string;
+    /** Group info for group messages; holds the group UUID. Defaults to
+     *  undefined. */
+    groupInfo?: { groupId?: string };
+    /** Alternate group field location (older signal-cli). Defaults to
+     *  undefined. */
+    group?: { groupId?: string };
+    /** URIs of attached files (images etc.). Each entry is either a plain
+     *  string URI or an object holding the attachment id. Defaults to
+     *  undefined. */
+    attachmentUris?: string[] | ({ id?: string; uuid?: string } | string)[];
+    /** @-mention targets. Defaults to undefined. */
+    mentions?: { number?: string; uuid?: string }[];
+    /** The recipient of the message; may be a bare UUID string or an object
+     *  with a `uuid` field. Defaults to undefined. */
+    recipient?: { uuid?: string } | string;
+    /** The group ID (alternative top-level location). Defaults to undefined. */
+    groupId?: string;
+    /** Escapes any further fields we haven't modeled. */
+    [field: string]: unknown;
+}
+
+export interface SignalEnvelope {
+    /** Envelope UUID from Signal. Used to key the per-conversation context
+     *  map. Optional in practice (missing only if malformed), defaults to
+     *  undefined. */
+    envelopeId?: string;
+    /** Sender phone number, e.g. "+15550001111". Used for admin/ignore checks
+     *  and mention matching. Defaults to undefined. */
+    source?: string;
+    /** Sender account UUID (used for mention matching). Defaults to undefined. */
+    sourceUuid?: string;
+    /** The data message payload. Defaults to undefined. */
+    dataMessage?: SignalDataMessage;
+}
+
+/**
+ * The POST body sent to the OpenAI-compatible /chat/completions endpoint.
+ * Modeled (instead of `any`) so `queryLLM`'s request has a concrete type.
+ */
+interface LlmRequest {
+    /** The model name to run. Defaults to `llmModel` env var. */
+    model: string;
+    /** The chat messages (see LlmMessage). Required. */
+    messages: LlmMessage[];
+    /** Context window size in tokens. Defaults to `llmModelContextSize`. */
+    num_ctx: number;
+    /** Whether to stream the response. We always set false. */
+    stream: boolean;
+    /** How long to keep the model loaded server-side (e.g. "15m"). */
+    keep_alive: string;
+}
+
+/**
+ * The JSON object an LLM emits when it wants to call one of our plugin
+ * functions (normalized over the wire). Modeled here so `invokeLlmFunction`
+ * and the JSON.parse site can be typed instead of `any`.
+ */
+interface PluginCallMessage {
+    /** The tool/action the LLM wants to invoke (e.g. "web_search"). Defaults
+     *  to undefined. */
+    action?: string;
+    /** The function name (alias for `action` in some models). Defaults to
+     *  undefined. */
+    function_name?: string;
+    /** Function arguments as a key/value object. Defaults to undefined. */
+    parameters?: { [argName: string]: unknown };
+    /** The LLM's role string, e.g. "assistant". Defaults to undefined. */
+    role?: string;
+    /** The function name (see `action`). Defaults to undefined. */
+    name?: string;
+    /** Function arguments (see `parameters`). Defaults to undefined. */
+    arguments?: { [argName: string]: unknown };
+    /** The LLM's message content/text. Defaults to undefined. */
+    content?: string;
+}
+
+async function invokeLlmFunction(objectMessage: PluginCallMessage, conversationId: string): Promise<string> {
     return new Promise(async (resolve, reject) => {
         try {
             // Determine if the function the LLM wants to call is an exposed LLM function.
-            const functionName = objectMessage.name;
+            const functionName: string = objectMessage.name || '';
             let func: string | undefined = undefined;
             for (let toolFunction of plugins.tools) {
                 if (toolFunction && toolFunction.function) {
@@ -669,25 +1049,29 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
             // https://stackoverflow.com/questions/51851677/how-to-get-argument-types-from-function-in-typescript
             if (func !== undefined) {
                 console.log('Invoker invoking LLM function.');
-                const funcArgs: any[] = [];
-                const oArguments: object = objectMessage.arguments;
+                const funcArgs: string[] = [];
+                const oArguments: { [argName: string]: unknown } = objectMessage.arguments || {};
                 let linkUrl = '';
                 for (let argName of Object.getOwnPropertyNames(oArguments)) {
                     const argumentName = argName.toString();
                     console.log(`Invoker argumentName: ${argumentName}`);
-                    const argumentValue = (oArguments as any)[argumentName];
+                    const argumentValue: unknown = oArguments[argumentName];
                     console.log(`Invoker arg type: ` + typeof argumentValue);
                     // TODO: support non-string argument values!
-                    const argumentStringValue: string = argumentValue.toString();
+                    const argumentStringValue: string = String(argumentValue);
                     console.log(`Invoker added arg: ${argumentStringValue}`);
                     // Array of string arguments are supported.
-                    if (Array.isArray(argumentValue) ||
-                        argumentStringValue.startsWith('[') &&
-                        argumentStringValue.endsWith(']')) {
-                        const stringArray: string[] = [];
+                    if (Array.isArray(argumentValue)) {
                         for (const stringValue of argumentValue) {
                             // FIXME: For now all the values of a string array go into the
                             // function arguments as separate args (ultimately wrong).
+                            funcArgs.push(String(stringValue));
+                        }
+                    } else if (argumentStringValue.startsWith('[') &&
+                               argumentStringValue.endsWith(']')) {
+                        // A string that *looks* like an array (legacy behavior: iterate its
+                        // characters, which is ultimately wrong but preserved here).
+                        for (const stringValue of argumentStringValue) {
                             funcArgs.push(stringValue);
                         }
                     } else {
@@ -731,10 +1115,13 @@ async function invokeLlmFunction(objectMessage: any, conversationId: string): Pr
     })
 }
 
-async function processQueuedMessages(botName: string, receivedArray: Array<any>) {
+async function processQueuedMessages(botName: string, receivedArray: Array<SignalEnvelope>) {
     // Process queued messages while the receive command isn't running.
     while (receivedArray.length > 0) {
-        await handleMessage(botName, receivedArray.shift() /*envelope*/);
+        const envelope = receivedArray.shift();
+        if (envelope) {
+            await handleMessage(botName, envelope);
+        }
     }
 }
 
@@ -754,11 +1141,10 @@ async function startBot() {
     console.log(`tools = ` + JSON.stringify(plugins.tools));
 
     // A queue of messages received from Signal that need processing.
-    let receivedArray: Array<any> = [];
+    let receivedArray: Array<SignalEnvelope> = [];
 
     // This is the server's forever loop, to stay running.
     while (true) {
-        let signalMessage: any;
         // Run the receiver process to receive messages from other users.
         const command = `${signalCliPath} --output=json --trust-new-identities=always -u ${botPhoneNumber} receive --send-read-receipts`;
         //console.log(command);
@@ -787,10 +1173,10 @@ async function startBot() {
             console.log(`RECEIVED: ` + line);
             // Parse signal-cli output and construct a signalMessage object
             try {
-                const signalMessage = JSON.parse(line);
+                const signalMessage: { envelope?: SignalEnvelope } = JSON.parse(line);
                 const envelope = signalMessage.envelope;
                 // TODO: support more message types such as images.
-                if (envelope && signalMessage.envelope.dataMessage) {
+                if (envelope?.dataMessage) {
                     // Enqueue the message.
                     receivedArray.push(envelope);
                     console.log(`Enqueued.`);
@@ -810,4 +1196,6 @@ async function startBot() {
     }
 }
 
-startBot().catch(console.error);
+if (require.main === module) {
+    startBot().catch(console.error);
+}

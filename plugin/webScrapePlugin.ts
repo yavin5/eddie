@@ -67,10 +67,10 @@ class WebScrapePlugin {
 
             // Remove all the quotes first.
             for (let arrayIndex = 0; arrayIndex < textLines.length; arrayIndex++) {
-    	    	textLines[arrayIndex] = textLines[arrayIndex].replace(/\"/gm, '');
-	        }
-    	    for (let arrayIndex = 0; arrayIndex < textLines.length; arrayIndex++) {
-	        	let line: string = textLines[arrayIndex];
+                textLines[arrayIndex] = textLines[arrayIndex].replace(/\"/gm, '');
+            }
+            for (let arrayIndex = 0; arrayIndex < textLines.length; arrayIndex++) {
+                let line: string = textLines[arrayIndex];
                 //console.log(`LINE ${arrayIndex}: ${line}`);
                 line = line.toLowerCase();
 
@@ -84,8 +84,8 @@ class WebScrapePlugin {
                  || line.includes('democracynow.org') || line.includes('nationalpost.com')
                  || line.includes('youtube.com') || line.includes('milkroad.com')
                  || line.includes('coinpedia.org')) {
-	    	        let index = arrayIndex;
-		            textLines[index] = '';
+                    let index = arrayIndex;
+                    textLines[index] = '';
                     if (textLines[index - 1] !== undefined && textLines[index - 1].startsWith('title:')) {
                         textLines[index - 1] = '';
                     }
@@ -208,7 +208,7 @@ class WebScrapePlugin {
 
         // Remove all <script>, <style>, and <svg> elements
         Array.from(document.querySelectorAll('script, style, svg')).forEach(element => {
-            (element as any).remove();
+            element.remove();
         });
 
         // Extract text content
@@ -228,7 +228,6 @@ class WebScrapePlugin {
     */
     scrapeJsonToPlainText(jsonText: string): string {
         const options: Options = {
-            color: false,                  // Whether to apply colors to the output or not
             spacing: false,                 // Whether to include spacing before colons or not
             seperator: ":",                // seperate keys and values.
             squareBracketsForArray: false, // Whether to use square brackets for arrays or not
