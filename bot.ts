@@ -14,7 +14,9 @@ dotenv.config();
 // Persistent directory where image attachments received from Signal are
 // saved to disk before being encoded for the LLM. Matches the directory
 // already referenced by imageCommand().
-const imageServerDir = path.resolve(__dirname, '../image-server');
+const imageServerDir = process.env.IMAGE_SERVER_DIR
+  ? path.resolve(process.env.IMAGE_SERVER_DIR)
+  : path.resolve(__dirname, '../image-server');
 
 /**
  * One element of the OpenAI-compatible multi-modal `content` array we send to

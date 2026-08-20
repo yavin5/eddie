@@ -99,7 +99,7 @@ The above procedure works well for some open source models (deepseek coder 2 128
 
 #### Done, Implemented Changes
 
-- Feature: Send image attachments (from private chats or groups, with or without accompanying text) through to a vision-capable LLM: image attachments arrive via `dataMessage.attachmentUris`, are fetched with `signal-cli fetchAttachment`, saved to disk, detected by MIME/magic bytes, encoded as base64 data-URLs, and inlined as multi-modal `image_url` content parts so the model can see them.
+- Feature: Send image attachments (from private chats or groups, with or without accompanying text) through to a vision-capable LLM: image attachments arrive via `dataMessage.attachmentUris`, are fetched with `signal-cli fetchAttachment`, saved to disk (in `../image-server`, or the directory named by the `IMAGE_SERVER_DIR` env var), detected by MIME/magic bytes, encoded as base64 data-URLs, and inlined as multi-modal `image_url` content parts so the model can see them.
 - Feature: Add the capability of generating images using the Spectacle image server.
 - Adjusted context size in bytes, allow user to config context size in *tokens*.
 - Rewrites LLM-written deepseek XML code snippets that represent function calls.
