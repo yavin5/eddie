@@ -22,7 +22,7 @@ Uses `dotenv`. Required env vars (loaded in `bot.ts`):
 |---|---|
 | `SIGNAL_CLI_PATH` | Path to `signal-cli` binary |
 | `BOT_PHONE_NUMBER` | Bot's Signal phone number |
-| `LLM_API_URL` | Ollama-compatible chat endpoint |
+| `LLM_API_URL` | Ollama-compatible chat endpoint (`/v1/chat/completions` or native `/api/chat`; both response shapes are accepted) |
 | `LLM_MODEL` | Model name for Ollama |
 | `LLM_MODEL_CONTEXT_SIZE` | Context window in tokens (default 8192) |
 | `EDDIE_ADMIN_0` | Admin phone number |
@@ -51,7 +51,7 @@ Uses `dotenv`. Required env vars (loaded in `bot.ts`):
 
 ## Key Gotchas
 
-- **Typing the LLM/Signal types (status)**: The old `any`s in `bot.ts` are replaced by the interfaces `LlmContentPart`, `LlmMessage`, `LlmRequest`, `SignalDataMessage`, `SignalEnvelope`, `PluginCallMessage` (top of `bot.ts`; the loader exposes the matching `LoadedPlugins` interface in `plugin/pluginLoader.ts`; `LlmContentPart`/`SignalEnvelope` are exported). Remaining intentional `any`: the method index-signature on `LoadedPlugins` (in `plugin/pluginLoader.ts`, consumed by the `plugins` variable in `bot.ts`), and the `SignalDataMessage`/`SignalEnvelope` escape index-signatures (for unmodeled fields). `buildMessageContent` returns `LlmContentPart[]`; `buildLlmMessages` returns `LlmMessage[]`; the LLM POST body is `LlmRequest`; `handleMessage`/`processQueuedMessages`/the receive queue use `SignalEnvelope`; `invokeLlmFunction` takes a `PluginCallMessage` with `funcArgs: string[]`. Any new `any` should be replaced with one of these (or a new typed interface) rather than left implicit.
+- **Typing the LLM/Signal types (status)**: The old `any`s in `bot.ts` are replaced by the interfaces `LlmContentPart`, `LlmMessage`, `LlmRequest`, `LlmResponse`, `SignalDataMessage`, `SignalEnvelope`, `PluginCallMessage` (top of `bot.ts`; the loader exposes the matching `LoadedPlugins` interface in `plugin/pluginLoader.ts`; `LlmContentPart`/`SignalEnvelope`/`LlmResponse` are exported). Remaining intentional `any`: the method index-signature on `LoadedPlugins` (in `plugin/pluginLoader.ts`, consumed by the `plugins` variable in `bot.ts`), and the `SignalDataMessage`/`SignalEnvelope` escape index-signatures (for unmodeled fields). `buildMessageContent` returns `LlmContentPart[]`; `buildLlmMessages` returns `LlmMessage[]`; the LLM POST body is `LlmRequest`; `handleMessage`/`processQueuedMessages`/the receive queue use `SignalEnvelope`; `invokeLlmFunction` takes a `PluginCallMessage` with `funcArgs: string[]`. Any new `any` should be replaced with one of these (or a new typed interface) rather than left implicit.
 - No lint or test framework beyond `npm test`; verify changes with `npm test` and `npm run typecheck`
 - `tsconfig.json` has `strict: true` but no `outDir` — compiled output goes alongside source
 - Image generation (`/image` command) talks to a separate Spectacle server at `../image-server` (relative to eddie)

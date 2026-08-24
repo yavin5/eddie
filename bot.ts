@@ -763,7 +763,7 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
 
         // Send a POST request to the LLM, sending the message context
         // In case LLM responds with empty string (sometimes), we loop, retrying a little.
-        let response = null;
+        let response: LlmResponse | null = null;
         let stringResponse = '';
         for (let retryCount = 0; !stringResponse && retryCount < 4; retryCount++) {
             const request: LlmRequest = {
@@ -773,8 +773,9 @@ async function queryLLM(actor: string, message: string, conversationId: string, 
                 stream: false,
                 keep_alive: "15m"
             };
-            response = await axios.post(llmApiUrl, request);
-            stringResponse = response.data.choices?.[0]?.message?.content ?? '';
+            const postResult = await axios.post(llmApiUrl, request);
+            response = postResult.data as LlmResponse;
+            stringResponse = extractLlmContent(response);
         }
         console.log(`LLM response: ${stringResponse}`);
 
@@ -980,6 +981,41 @@ export interface SignalEnvelope {
     sourceUuid?: string;
     /** The data message payload. Defaults to undefined. */
     dataMessage?: SignalDataMessage;
+}
+
+/**
+ * Body of the LLM chat-completions API response. We support both the
+ * OpenAI-compatible shape (Ollama's `/v1/chat/completions`), which nests the
+ * reply under `choices[0].message.content`, and the Ollama native `/api/chat`
+ * shape, which carries it directly at `message.content`, so the client works
+ * against whichever flavor `LLM_API_URL` points to.
+ */
+export interface LlmResponse {
+    /** OpenAI-compatible choices array; absent in the native Ollama shape. */
+    choices?: { message?: { content?: string; }; }[];
+    /** Native Ollama message field; absent in the OpenAI-compatible shape. */
+    message?: { content?: string; };
+}
+
+//----------------------------------------------------------------------------
+// LLM response shape helpers
+//----------------------------------------------------------------------------
+
+/**
+ * Pulls the assistant's text content out of an LLM API response body, whether
+ * it arrived in the OpenAI-compatible `choices[0].message.content` shape or
+ * the native Ollama `message.content` shape. Returns the empty string if the
+ * reply is missing from both places (e.g. the model consumed its budget on
+ * thinking).
+ * @param {LlmResponse} data The response body from the LLM POST.
+ * @returns {string} The assistant's text content, or '' if absent.
+ */
+export function extractLlmContent(data: LlmResponse): string {
+    if (!data) return '';
+    const fromChoices = data.choices?.[0]?.message?.content;
+    if (typeof fromChoices === 'string' && fromChoices.length > 0) return fromChoices;
+    const fromMessage = data.message?.content;
+    return (typeof fromMessage === 'string' && fromMessage.length > 0) ? fromMessage : '';
 }
 
 /**

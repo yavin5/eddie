@@ -19,7 +19,9 @@ import {
     buildMessageContent,
     imageFileToDataUrl,
     buildLlmMessages,
+    extractLlmContent,
     LlmContentPart,
+    LlmResponse,
 } from './bot';
 
 let pass = 0;
@@ -218,6 +220,44 @@ ok('images -> multi-modal content array', () => {
 });
 ok('empty messages -> empty array', () => {
     assert.deepEqual(buildLlmMessages([]), []);
+});
+
+// ---------------------------------------------------------------------------
+// extractLlmContent
+// The reply text must be extractable from both the OpenAI-compatible
+// `choices[0].message.content` shape and the native Ollama `message.content`
+// shape, returning '' when the reply is absent from both.
+// ---------------------------------------------------------------------------
+console.log('extractLlmContent — accept both API response shapes');
+const REPLY = 'Hello hello';
+ok('OpenAI-compatible choices shape', () => {
+    const body: LlmResponse = {
+        choices: [{ message: { content: REPLY } }],
+    };
+    assert.equal(extractLlmContent(body), REPLY);
+});
+ok('native Ollama message shape', () => {
+    const body: LlmResponse = {
+        message: { content: REPLY },
+    };
+    assert.equal(extractLlmContent(body), REPLY);
+});
+ok('choices shape wins when both present', () => {
+    const body: LlmResponse = {
+        choices: [{ message: { content: REPLY } }],
+        message: { content: 'other' },
+    };
+    assert.equal(extractLlmContent(body), REPLY);
+});
+ok('empty when both shapes absent', () => {
+    assert.equal(extractLlmContent({}), '');
+});
+ok('empty content fields treated as missing', () => {
+    const body: LlmResponse = {
+        choices: [{ message: { content: '' } }],
+        message: { content: '' },
+    };
+    assert.equal(extractLlmContent(body), '');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -99,6 +99,7 @@ The above procedure works well for some open source models (deepseek coder 2 128
 
 #### Done, Implemented Changes
 
+- Bugfix / Feature: The LLM response parser now accepts both response shapes from the chat endpoint — the OpenAI-compatible `choices[0].message.content` form and the native Ollama `message.content` form — so Eddie works whether `LLM_API_URL` points at `/v1/chat/completions` or `/api/chat` (previously a shape mismatch yielded an empty reply and the user got no answer). Extraction lives in an exported, unit-tested `extractLlmContent()` in `bot.ts`.
 - Feature: Send image attachments (from private chats or groups, with or without accompanying text) through to a vision-capable LLM: image attachments arrive via `dataMessage.attachmentUris`, are fetched with `signal-cli fetchAttachment`, saved to disk (in `../image-server`, or the directory named by the `IMAGE_SERVER_DIR` env var), detected by MIME/magic bytes, encoded as base64 data-URLs, and inlined as multi-modal `image_url` content parts so the model can see them.
 - Feature: Add the capability of generating images using the Spectacle image server.
 - Adjusted context size in bytes, allow user to config context size in *tokens*.
