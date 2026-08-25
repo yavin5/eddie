@@ -22,6 +22,7 @@ import {
     extractLlmContent,
     LlmContentPart,
     LlmResponse,
+    shouldUseFetchAttachmentAlias,
 } from './bot';
 
 let pass = 0;
@@ -258,6 +259,17 @@ ok('empty content fields treated as missing', () => {
         message: { content: '' },
     };
     assert.equal(extractLlmContent(body), '');
+});
+
+ok('shouldUseFetchAttachmentAlias — rename vs generic error', () => {
+    // signal-cli 0.14+ reports the old command name as unknown
+    assert.equal(shouldUseFetchAttachmentAlias('Error: unknown command: getAttachment'), true);
+    assert.equal(shouldUseFetchAttachmentAlias("signal-cli: Unrecognized command 'getAttachment'"), true);
+    assert.equal(shouldUseFetchAttachmentAlias('not a command: getAttachment'), true);
+    // generic failures are not a rename — the original error should surface
+    assert.equal(shouldUseFetchAttachmentAlias('Error: attachment not found'), false);
+    assert.equal(shouldUseFetchAttachmentAlias('signal-cli exited with code 1: network error'), false);
+    assert.equal(shouldUseFetchAttachmentAlias('ENOENT'), false);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -226,6 +226,9 @@ async function handleMessage(botName: string, envelope: SignalEnvelope): Promise
         } catch (e) {
             console.log(`Failed to fetch attachments: ${e}`);
         }
+        console.log(`Attachment fetch: ${imagePaths.length} image(s) ready for this message.`);
+    } else {
+        console.log(`No attachmentUris seen on dataMessage; dataMessage keys: [${Object.keys(dataMessage ?? {}).join(', ')}]`);
     }
     if (!content.trim() && imagePaths.length > 0) {
         content = 'The user sent you image(s) with no caption. Take a good look.';
@@ -622,25 +625,65 @@ export function imageFileToDataUrl(imgPath: string): string {
  * @throws Will throw if signal-cli exits non-zero or the buffer is not a
  *   recognized image.
  */
-export async function fetchAttachment(attachmentId: string, recipient: string, groupId: string, index: number = 0): Promise<string> {
-    const args: string[] = ['getAttachment', '--id', attachmentId];
-    if (groupId) args.push('-g', groupId);
-    else args.push('--recipient', recipient);
-
-    const { stdout, stderr, code } = await new Promise<{ stdout: Buffer, stderr: Buffer, code: number }>((resolve, reject) => {
+/**
+ * Runs `signal-cli <command>` and resolves to its raw stdout/stderr buffers.
+ * Used for attachment downloads, which can be large binary payloads.
+ * @param {string[]} args The full argument list (command word first).
+ * @return {Promise<{ stdout: Buffer; stderr: Buffer; }>} The command's output.
+ * @throws On non-zero exit or if the process is killed.
+ */
+function runSignalCliCommand(args: string[]): Promise<{ stdout: Buffer; stderr: Buffer; }> {
+    return new Promise((resolve, reject) => {
         execFile(signalCliPath, args, {
             maxBuffer: 512 * 1024 * 1024, // 512 MB
             encoding: 'buffer'
         }, (error, sOut: Buffer, sErr: Buffer) => {
             if (error) {
                 const err = error as NodeJS.ErrnoException & { killed: boolean; };
-                if (err.killed) reject(new Error('signal-cli getAttachment timed out'));
-                else reject(new Error(`signal-cli getAttachment exited with code ${err.code}: ${err.message}${sErr ? ' ' + sErr.toString('utf8') : ''}`));
+                if (err.killed) reject(new Error(`signal-cli ${args[0]} timed out`));
+                else reject(new Error(`signal-cli ${args[0]} exited with code ${err.code}: ${err.message}${sErr ? ' ' + sErr.toString('utf8') : ''}`));
             } else {
-                resolve({ stdout: sOut, stderr: sErr, code: 0 });
+                resolve({ stdout: sOut, stderr: sErr });
             }
         });
     });
+}
+
+/**
+ * Decides whether a failed `getAttachment` attempt is because this
+ * signal-cli version renamed the command, in which case we should retry as
+ * `fetchAttachment`.
+ * @param {string} errorMessage The error message from the failed attempt.
+ * @return {boolean} True if we should retry with the new command name.
+ */
+export function shouldUseFetchAttachmentAlias(errorMessage: string): boolean {
+    return /unknown|unrecognized|not[ ]+a[ ]+command|no[ ]+such[ ]+command|invalid[ ]+command/i.test(errorMessage);
+}
+
+/**
+ * Downloads a single Signal attachment, transparently supporting both the
+ * `getAttachment` (signal-cli < 0.14) and `fetchAttachment` (0.14+) command
+ * names.
+ * @param {string[]} baseArgs Arguments after the command word (e.g. `--id`)
+ * @return {Promise<{ stdout: Buffer; stderr: Buffer; }>}
+ */
+async function runSignalCliGetAttachment(baseArgs: string[]): Promise<{ stdout: Buffer; stderr: Buffer; }> {
+    try {
+        return await runSignalCliCommand(['getAttachment', ...baseArgs]);
+    } catch (e) {
+        if (shouldUseFetchAttachmentAlias(String(e))) {
+            return await runSignalCliCommand(['fetchAttachment', ...baseArgs]);
+        }
+        throw e;
+    }
+}
+
+export async function fetchAttachment(attachmentId: string, recipient: string, groupId: string, index: number = 0): Promise<string> {
+    const baseArgs: string[] = ['--id', attachmentId];
+    if (groupId) baseArgs.push('-g', groupId);
+    else baseArgs.push('--recipient', recipient);
+
+    const { stdout } = await runSignalCliGetAttachment(baseArgs);
 
     const raw = stripPossibleJsonHeader(stdout);
     const detected = detectImageMimeExt(raw);
