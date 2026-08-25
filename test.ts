@@ -24,6 +24,7 @@ import {
     LlmResponse,
     shouldUseFetchAttachmentAlias,
     extractAttachmentIds,
+    buildGetAttachmentArgs,
     SignalDataMessage,
 } from './bot';
 
@@ -311,6 +312,37 @@ ok('both fields — attachmentUris (legacy) wins, no dupes of the modern side', 
 ok('absent / empty fields → empty array', () => {
     assert.deepEqual(extractAttachmentIds({}), []);
     assert.deepEqual(extractAttachmentIds({ message: 'just text' }), []);
+});
+
+// ---------------------------------------------------------------------------
+// buildGetAttachmentArgs
+// Builds the signal-cli getAttachment/fetchAttachment argument array. The
+// production bug: for 1:1 chats `dataMessage.recipient` is often absent, so an
+// empty `--recipient ''` flag was pushed and signal-cli rejected it with
+// "Multiple users found, need -a". The account is now pinned with `-a` and an
+// empty recipient is omitted entirely.
+// ---------------------------------------------------------------------------
+const BOT_PILL = process.env.BOT_PHONE_NUMBER ? ['-a', process.env.BOT_PHONE_NUMBER] : [];
+console.log('buildGetAttachmentArgs — flags are well-formed for every recipient shape');
+ok('direct message → --recipient <number>, account pinned with -a', () => {
+    assert.deepEqual(
+        buildGetAttachmentArgs('a1', '+15551234567', ''),
+        ['--id', 'a1', ...BOT_PILL, '--recipient', '+15551234567']);
+});
+ok('group message → -g <groupId>, no --recipient flag at all', () => {
+    assert.deepEqual(
+        buildGetAttachmentArgs('a2', '', 'GRP=='),
+        ['--id', 'a2', ...BOT_PILL, '-g', 'GRP==']);
+});
+ok('group message wins over a stray recipient value', () => {
+    assert.deepEqual(
+        buildGetAttachmentArgs('a4', '+15551234567', 'GRP=='),
+        ['--id', 'a4', ...BOT_PILL, '-g', 'GRP==']);
+});
+ok('empty recipient is omitted — no dangling --recipient flag with no value', () => {
+    assert.deepEqual(
+        buildGetAttachmentArgs('a3', '', ''),
+        ['--id', 'a3', ...BOT_PILL]);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

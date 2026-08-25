@@ -222,7 +222,7 @@ async function handleMessage(botName: string, envelope: SignalEnvelope): Promise
     let imagePaths: string[] = [];
     if (dataMessage && extractAttachmentIds(dataMessage).length > 0) {
         try {
-            imagePaths = await fetchAttachmentImages(dataMessage);
+            imagePaths = await fetchAttachmentImages(dataMessage, sender);
         } catch (e) {
             console.log(`Failed to fetch attachments: ${e}`);
         }
@@ -678,10 +678,26 @@ async function runSignalCliGetAttachment(baseArgs: string[]): Promise<{ stdout: 
     }
 }
 
+/**
+ * Builds the signal-cli `getAttachment`/`fetchAttachment` argument array.
+ * The account is pinned with `-a` (the bot's own number) so that multi-account
+ * signal-cli configurations can resolve the account unambiguously; an empty
+ * recipient is omitted rather than passed as an empty `--recipient` value.
+ * @param {string} attachmentId The attachment id from the dataMessage.
+ * @param {string} recipient The recipient number/UUID for direct messages (may be empty).
+ * @param {string} groupId The group id (may be empty).
+ * @return {string[]} Argument array following the command word.
+ */
+export function buildGetAttachmentArgs(attachmentId: string, recipient: string, groupId: string): string[] {
+    const args: string[] = ['--id', attachmentId];
+    if (botPhoneNumber) args.push('-a', botPhoneNumber);
+    if (groupId) args.push('-g', groupId);
+    else if (recipient) args.push('--recipient', recipient);
+    return args;
+}
+
 export async function fetchAttachment(attachmentId: string, recipient: string, groupId: string, index: number = 0): Promise<string> {
-    const baseArgs: string[] = ['--id', attachmentId];
-    if (groupId) baseArgs.push('-g', groupId);
-    else baseArgs.push('--recipient', recipient);
+    const baseArgs: string[] = buildGetAttachmentArgs(attachmentId, recipient, groupId);
 
     const { stdout } = await runSignalCliGetAttachment(baseArgs);
 
@@ -727,11 +743,12 @@ export function extractAttachmentIds(dataMessage: SignalDataMessage): string[] {
  * @param {any} dataMessage The dataMessage object from the envelope.
  * @return {Promise<string[]>} Array of absolute paths to saved image files.
  */
-export async function fetchAttachmentImages(dataMessage: SignalDataMessage): Promise<string[]> {
+export async function fetchAttachmentImages(dataMessage: SignalDataMessage, fallbackRecipient: string = ''): Promise<string[]> {
     const attachmentUris: string[] = extractAttachmentIds(dataMessage);
-    const recipient: string | undefined = (typeof dataMessage?.recipient === 'string' ? dataMessage.recipient : (dataMessage?.recipient as { uuid?: string })?.uuid) ?? (dataMessage?.groupId as string | undefined);
+    const dataRecipient: string | undefined = (typeof dataMessage?.recipient === 'string' ? dataMessage.recipient : (dataMessage?.recipient as { uuid?: string })?.uuid) ?? (dataMessage?.groupId as string | undefined);
+    const recipient: string = dataRecipient || fallbackRecipient;
     const groupId: string | undefined = dataMessage?.group?.groupId ?? (dataMessage?.groupId as string | undefined);
-    console.log(`Message ${recipient || groupId} has ` + attachmentUris.length + ' attachments.');
+    console.log(`Message ${recipient || groupId || 'private chat'} has ` + attachmentUris.length + ' attachments.');
     const fullPaths: string[] = [];
     for (let i = 0; i < attachmentUris.length; i++) {
         const attId = attachmentUris[i];
