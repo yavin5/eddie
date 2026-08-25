@@ -174,14 +174,14 @@ function sendMessage(recipient: string, message: string, isAttachment: boolean =
         groupFlag = '-g';
     }
     let args: string[] = ['-u', botPhoneNumber, 'send'];
-    if (groupFlag) args.push(groupFlag);
     if (isAttachment) {
         // The message is a file path / filename, so send it as an attachment.
         args.push('--attachment', message);
     } else {
         args.push('-m', message);
     }
-    args.push(recipientCli);
+    if (groupFlag) args.push(groupFlag, recipientCli);
+    else args.push(recipientCli);
     console.log(`${signalCliPath} ${args.join(' ')}`);
     const child = execFile(signalCliPath, args);
     child.on('error', (error: Error) => {
@@ -220,7 +220,7 @@ async function handleMessage(botName: string, envelope: SignalEnvelope): Promise
 
     // Fetch any image attachments from this message, so they can be seen by the LLM.
     let imagePaths: string[] = [];
-    if (dataMessage && dataMessage.attachmentUris && dataMessage.attachmentUris.length > 0) {
+    if (dataMessage && extractAttachmentIds(dataMessage).length > 0) {
         try {
             imagePaths = await fetchAttachmentImages(dataMessage);
         } catch (e) {
@@ -228,7 +228,7 @@ async function handleMessage(botName: string, envelope: SignalEnvelope): Promise
         }
         console.log(`Attachment fetch: ${imagePaths.length} image(s) ready for this message.`);
     } else {
-        console.log(`No attachmentUris seen on dataMessage; dataMessage keys: [${Object.keys(dataMessage ?? {}).join(', ')}]`);
+        console.log(`No attachments (attachmentUris or attachments) seen on dataMessage; dataMessage keys: [${Object.keys(dataMessage ?? {}).join(', ')}]`);
     }
     if (!content.trim() && imagePaths.length > 0) {
         content = 'The user sent you image(s) with no caption. Take a good look.';
@@ -698,22 +698,43 @@ export async function fetchAttachment(attachmentId: string, recipient: string, g
 }
 
 /**
+ * Collects the attachment ids for a dataMessage, regardless of which field
+ * the installed signal-cli version populated. Older builds emit
+ * `attachmentUris` (string URIs or `{id}`/`{uuid}` objects); newer builds
+ * (0.14+) emit `attachments` (descriptor objects with an `id` field).
+ * @param {SignalDataMessage} dataMessage The dataMessage object from an envelope.
+ * @return {string[]} Array of attachment id strings, empty when neither field
+ *   is present or holds no usable ids.
+ */
+export function extractAttachmentIds(dataMessage: SignalDataMessage): string[] {
+    const entries: ({ id?: string; uuid?: string } | string)[] =
+        ((dataMessage?.attachmentUris || dataMessage?.attachments || []) as ({ id?: string; uuid?: string } | string)[]);
+    const ids: string[] = [];
+    for (const entry of entries) {
+        if (typeof entry === 'string' && entry.length > 0) {
+            ids.push(entry);
+        } else if (entry && typeof entry === 'object') {
+            const id = entry.id || entry.uuid;
+            if (id) ids.push(id);
+        }
+    }
+    return ids;
+}
+
+/**
  * Fetches all attachments from a Signal dataMessage envelope and saves them to
  * the image server directory. Skips non-image attachments silently.
  * @param {any} dataMessage The dataMessage object from the envelope.
  * @return {Promise<string[]>} Array of absolute paths to saved image files.
  */
 export async function fetchAttachmentImages(dataMessage: SignalDataMessage): Promise<string[]> {
-    const attachmentUris: ({ id?: string; uuid?: string } | string)[] = dataMessage?.attachmentUris as ({ id?: string; uuid?: string } | string)[] || [];
+    const attachmentUris: string[] = extractAttachmentIds(dataMessage);
     const recipient: string | undefined = (typeof dataMessage?.recipient === 'string' ? dataMessage.recipient : (dataMessage?.recipient as { uuid?: string })?.uuid) ?? (dataMessage?.groupId as string | undefined);
     const groupId: string | undefined = dataMessage?.group?.groupId ?? (dataMessage?.groupId as string | undefined);
     console.log(`Message ${recipient || groupId} has ` + attachmentUris.length + ' attachments.');
     const fullPaths: string[] = [];
     for (let i = 0; i < attachmentUris.length; i++) {
-        const uri = attachmentUris[i];
-        if (!uri || typeof uri !== 'object') continue;
-        const attId: string | undefined = uri.id || uri.uuid;
-        if (!attId) continue;
+        const attId = attachmentUris[i];
         try {
             const filePath = await fetchAttachment(attId, recipient || '', groupId || '', i);
             fullPaths.push(filePath);
@@ -982,7 +1003,7 @@ function shouldWebScrape(message: string, conversationContext: ConversationConte
  * signal-cli's receive command. Modeled (instead of `any`) so `handleMessage`
  * can be typed end-to-end.
  */
-interface SignalDataMessage {
+export interface SignalDataMessage {
     /** Message text (newer signal-cli field name). Defaults to undefined. */
     text?: string;
     /** Message text (older signal-cli field name, still emitted). Defaults
@@ -997,10 +1018,15 @@ interface SignalDataMessage {
     /** Alternate group field location (older signal-cli). Defaults to
      *  undefined. */
     group?: { groupId?: string };
-    /** URIs of attached files (images etc.). Each entry is either a plain
-     *  string URI or an object holding the attachment id. Defaults to
-     *  undefined. */
+    /** URIs of attached files (images etc.), as emitted by older signal-cli.
+     *  Each entry is either a plain string URI or an object holding the
+     *  attachment id. Newer signal-cli emits `attachments` instead; both are
+     *  read via `extractAttachmentIds()`. Defaults to undefined. */
     attachmentUris?: string[] | ({ id?: string; uuid?: string } | string)[];
+    /** Modern (signal-cli 0.14+) attachment descriptors. Each object carries
+     *  an `id` — the value `signal-cli getAttachment --id` consumes — plus
+     *  contentType/file size/dimensions metadata. Defaults to undefined. */
+    attachments?: SignalAttachment[];
     /** @-mention targets. Defaults to undefined. */
     mentions?: { number?: string; uuid?: string }[];
     /** The recipient of the message; may be a bare UUID string or an object
@@ -1010,6 +1036,35 @@ interface SignalDataMessage {
     groupId?: string;
     /** Escapes any further fields we haven't modeled. */
     [field: string]: unknown;
+}
+
+/**
+ * One element of a modern signal-cli `dataMessage.attachments` array.
+ * Models the descriptor object (as opposed to the `attachmentUris` string
+ * form, which is just a URI/id). Exported so `pluginLoader`'s JSDoc
+ * introspection can reference a concrete type and tests can type their
+ * fixtures.
+ */
+export interface SignalAttachment {
+    /** The attachment id (e.g. `wgqC4jNId3S8Pgg-vDY-.jpg`). This is what
+     *  `signal-cli getAttachment --id` takes. */
+    id?: string;
+    /** Legacy alternative id key (older signal-cli). */
+    uuid?: string;
+    /** MIME type reported by Signal, e.g. `image/jpeg`. */
+    contentType?: string;
+    /** The original filename, when provided. */
+    filename?: string | null;
+    /** File size in bytes. */
+    size?: number;
+    /** Image width in pixels. */
+    width?: number;
+    /** Image height in pixels. */
+    height?: number;
+    /** Caption, when one was sent alongside the image. */
+    caption?: string | null;
+    /** Upload timestamp, epoch milliseconds. */
+    uploadTimestamp?: number;
 }
 
 export interface SignalEnvelope {

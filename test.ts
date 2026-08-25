@@ -23,6 +23,8 @@ import {
     LlmContentPart,
     LlmResponse,
     shouldUseFetchAttachmentAlias,
+    extractAttachmentIds,
+    SignalDataMessage,
 } from './bot';
 
 let pass = 0;
@@ -270,6 +272,45 @@ ok('shouldUseFetchAttachmentAlias — rename vs generic error', () => {
     assert.equal(shouldUseFetchAttachmentAlias('Error: attachment not found'), false);
     assert.equal(shouldUseFetchAttachmentAlias('signal-cli exited with code 1: network error'), false);
     assert.equal(shouldUseFetchAttachmentAlias('ENOENT'), false);
+});
+
+// ---------------------------------------------------------------------------
+// extractAttachmentIds
+// Pulls the attachment id(s) out of a dataMessage regardless of which field
+// the installed signal-cli version filled: the legacy `attachmentUris`
+// (string URI or {id}/{uuid} object) or the modern `attachments` array of
+// descriptor objects. This is the bug the production log showed — the data
+// message had `attachments`, but the code only read `attachmentUris`.
+// ---------------------------------------------------------------------------
+console.log('extractAttachmentIds — read both attachment field names');
+ok('modern signal-cli `attachments` field with id descriptors', () => {
+    const dm: SignalDataMessage = {
+        timestamp: '1787624279461',
+        message: "What's in this photo?",
+        attachments: [
+            { id: 'wgqC4jNId3S8Pgg-vDY-.jpg', contentType: 'image/jpeg', size: 871980, width: 1848, height: 4000 },
+        ],
+    };
+    assert.deepEqual(extractAttachmentIds(dm), ['wgqC4jNId3S8Pgg-vDY-.jpg']);
+});
+ok('legacy `attachmentUris` as plain string URIs', () => {
+    assert.deepEqual(extractAttachmentIds({ attachmentUris: ['abc.jpg', 'def.png'] }), ['abc.jpg', 'def.png']);
+});
+ok('legacy `attachmentUris` with {id} and {uuid} objects', () => {
+    assert.deepEqual(extractAttachmentIds({ attachmentUris: [{ id: 'a.jpg' }, { uuid: 'b.jpg' }] }), ['a.jpg', 'b.jpg']);
+});
+ok('legacy string mix — skips empty entries', () => {
+    assert.deepEqual(extractAttachmentIds({ attachmentUris: ['', 'only.jpg', '', {}] }), ['only.jpg']);
+});
+ok('both fields — attachmentUris (legacy) wins, no dupes of the modern side', () => {
+    assert.deepEqual(extractAttachmentIds({
+        attachmentUris: ['legacy.jpg'],
+        attachments: [{ id: 'modern.jpg' }],
+    }), ['legacy.jpg']);
+});
+ok('absent / empty fields → empty array', () => {
+    assert.deepEqual(extractAttachmentIds({}), []);
+    assert.deepEqual(extractAttachmentIds({ message: 'just text' }), []);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
