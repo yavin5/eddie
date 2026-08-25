@@ -138,12 +138,27 @@ let idToConversationContextMap: { [key: string]: ConversationContext } = {};
 const administrators = new Set<string>([process.env.EDDIE_ADMIN_0!]);
 const ignoredUsers = new Set<string>();
 
+/**
+ * Builds the signal-cli `listContacts` argument array used to resolve the
+ * bot's own profile name. The bot number is pinned with global options
+ * (`-u`, `-a`) placed *before* the subcommand word — matching the position
+ * that works on signal-cli 0.14+ where account flags after the subcommand
+ * are rejected.
+ * @param {string} botNumber The bot's own Signal number.
+ * @return {string[]} Argument array for `execFile(signalCliPath, …)`.
+ */
+export function buildListContactsArgs(botNumber: string): string[] {
+    return ['--output=json', '-u', botNumber, '-a', botNumber, 'listContacts'];
+}
+
 // Get bot's name from the Signal profile
 function getBotName(): Promise<string> {
     return new Promise((resolve, reject) => {
-        exec(`${signalCliPath} --output=json -u ${botPhoneNumber} listContacts -a ${botPhoneNumber}`, (error, stdout, stderr) => {
+        execFile(signalCliPath, buildListContactsArgs(botPhoneNumber), (error: Error | null, stdout: string, stderr: string) => {
             if (error) {
-                return reject(stderr);
+                return reject(
+                    (typeof stderr === 'string' && stderr.length > 0) ? stderr : (error && error.message) || 'listContacts failed'
+                );
             }
 
             try {
@@ -164,24 +179,35 @@ function getBotName(): Promise<string> {
     });
 }
 
+/**
+ * Builds the signal-cli `send` argument array. Group ids (which end in `=`,
+ * i.e. no `group:` prefix) are passed with their `-g` flag after the message
+ * body; direct-message numbers are appended as the bare final argument. The
+ * bot account is pinned with the global `-u` flag up front.
+ * @param {string} mode `text` (a `-m` body) or `attachment` (an `--attachment` file path).
+ * @param {string} message The message body or the attachment file path.
+ * @param {string} recipient A direct number, or a group id without the `group:` prefix.
+ * @param {string} botNumber The bot's own Signal number.
+ * @return {string[]} Argument array for `execFile(signalCliPath, …)`.
+ */
+export function buildSendArgs(mode: 'text' | 'attachment', message: string, recipient: string, botNumber: string): string[] {
+    const flag: string = mode === 'text' ? '-m' : '--attachment';
+    if (recipient.endsWith('=')) {
+        return ['-u', botNumber, 'send', flag, message, '-g', recipient];
+    }
+    return ['-u', botNumber, 'send', flag, message, recipient];
+}
+
 // Send a message via signal-cli.
 // Uses execFile with an argument array so recipient and message content are
 // never parsed by a shell (which prevents command injection).
 function sendMessage(recipient: string, message: string, isAttachment: boolean = false): void {
-    let recipientCli: string = recipient;
-    let groupFlag: string | null = null;
-    if (recipient.endsWith('=')) {
-        groupFlag = '-g';
-    }
-    let args: string[] = ['-u', botPhoneNumber, 'send'];
-    if (isAttachment) {
-        // The message is a file path / filename, so send it as an attachment.
-        args.push('--attachment', message);
-    } else {
-        args.push('-m', message);
-    }
-    if (groupFlag) args.push(groupFlag, recipientCli);
-    else args.push(recipientCli);
+    const args: string[] = buildSendArgs(
+        isAttachment ? 'attachment' : 'text',
+        message,
+        recipient,
+        botPhoneNumber
+    );
     console.log(`${signalCliPath} ${args.join(' ')}`);
     const child = execFile(signalCliPath, args);
     child.on('error', (error: Error) => {
@@ -190,7 +216,7 @@ function sendMessage(recipient: string, message: string, isAttachment: boolean =
 }
 
 // Helper function to extract content after bot mention for slash command handling
-function extractContentAfterBotMention(content: string, botName: string): string {
+export function extractContentAfterBotMention(content: string, botName: string): string {
     let msg = content;
     if (msg.toLowerCase().startsWith(botName.toLowerCase())) {
         msg = msg.substring(botName.length);
@@ -199,6 +225,29 @@ function extractContentAfterBotMention(content: string, botName: string): string
         msg = msg.substring(botName.length + 1);
     }
     return msg.trim();
+}
+
+/**
+ * Parses one line of `signal-cli receive` JSON output. Returns the
+ * envelope when it is present and carries a `dataMessage`, otherwise null
+ * (the line is logged for diagnosis — e.g. a profile-update line has an
+ * envelope without a dataMessage and must not be enqueued as a message).
+ * @param {string} line A single line of receive output.
+ * @return {SignalEnvelope|null} The envelope, or null when the line should
+ *   be skipped (malformed JSON, no envelope, or no dataMessage).
+ */
+export function parseReceiveLine(line: string): SignalEnvelope | null {
+    try {
+        const signalMessage: { envelope?: SignalEnvelope } = JSON.parse(line);
+        const envelope: SignalEnvelope | undefined = signalMessage?.envelope;
+        if (envelope?.dataMessage) {
+            return envelope;
+        }
+        console.log(`skipping receive line with no dataMessage: ${line.slice(0, 300)}`);
+    } catch (parseError) {
+        console.log(`skipping malformed signal receive line: ${String(parseError)} — ${line.slice(0, 200)}`);
+    }
+    return null;
 }
 
 // Handle incoming messages
@@ -414,7 +463,18 @@ function pruneChatMessages(messages: ChatMessage[]): ChatMessage[] {
 }
 
 // Helper function to clip <think>cot</think> content from LLM response
-function clipThinkTags(response: string): string {
+/**
+ * Clips away the model's `\u003cthink\u003e…\u003c/think\u003e` block, keeping only the text
+ * after the closing tag. Returns the original response when there is no
+ * closing `\u003c/think\u003e` line (nothing to clip), and an empty string when the
+ * closing tag is present but no text follows it — so callers can handle the
+ * "the model thought but said nothing" case separately instead of sending an
+ * empty think block to the user.
+ * @param {string} response The LLM's raw response string.
+ * @return {string} The response with any leading think block removed and the
+ *   remainder trimmed.
+ */
+export function clipThinkTags(response: string): string {
     const lines = response.split(/\r?\n/);
     let found = false;
     let result: string[] = [];
@@ -561,6 +621,26 @@ export function stripPossibleJsonHeader(buf: Buffer): Buffer {
 }
 
 /**
+ * Decodes a base64-encoded attachment body if the raw buffer isn't already a
+ * recognized image but decodes to one. Supports plain base64 and
+ * `data:u003cmimeu003e;base64,` prefixed bodies. Returns the original buffer when
+ * the decode isn't a clean image, so callers can fall back to their normal
+ * error path.
+ * @param {Buffer} buf Raw attachment body (after any JSON-header strip).
+ * @return {Buffer} The decoded image bytes, or the input unchanged.
+ */
+export function decodeBase64IfNecessary(buf: Buffer): Buffer {
+    if (isRecognizedImage(buf)) return buf;
+    let text = buf.toString('utf8').trim();
+    const dataUrlMatch = text.match(/^data:[^;]+;base64,/);
+    if (dataUrlMatch) text = text.slice(dataUrlMatch[0].length);
+    if (!text || !/^[A-Za-z0-9+/]+={0,2}$/.test(text)) return buf;
+    const decoded = Buffer.from(text, 'base64');
+    if (isRecognizedImage(decoded)) return decoded;
+    return buf;
+}
+
+/**
  * Returns true if the buffer begins with recognized image magic bytes.
  * @param {Buffer} buffer The buffer to test.
  * @return {boolean} True if the buffer is a recognized image file.
@@ -650,39 +730,106 @@ function runSignalCliCommand(args: string[]): Promise<{ stdout: Buffer; stderr: 
 }
 
 /**
- * Decides whether a failed `getAttachment` attempt is because this
- * signal-cli version renamed the command, in which case we should retry as
- * `fetchAttachment`.
+ * Decides whether a failed attachment-download attempt simply named a
+ * subcommand the local signal-cli build doesn't have, in which case the
+ * other command name should be tried. Deliberately narrow: generic argument
+ * errors ("unrecognized arguments", "multiple users found", ...) must NOT
+ * trigger the alias, only "no such command" style messages should.
  * @param {string} errorMessage The error message from the failed attempt.
- * @return {boolean} True if we should retry with the new command name.
+ * @return {boolean} True if the other attachment command name should be tried.
  */
 export function shouldUseFetchAttachmentAlias(errorMessage: string): boolean {
-    return /unknown|unrecognized|not[ ]+a[ ]+command|no[ ]+such[ ]+command|invalid[ ]+command/i.test(errorMessage);
+    return /invalid choice|no[ ]+such[ ]+command|not[ ]+a[ ]+command|unknown[ ]+(sub)?command|unrecognized[ ]+(sub)?command/i.test(errorMessage);
+}
+
+let cachedAttachmentCommand: 'getAttachment' | 'fetchAttachment' | undefined;
+
+/**
+ * Maps the `getAttachment --help` probe result to the attachment-download
+ * subcommand name this signal-cli build supports.
+ * @param {boolean} getAttachmentHelpOk True when `getAttachment --help`
+ *   exits zero.
+ * @return {'getAttachment' | 'fetchAttachment'} The command word to use.
+ */
+export function pickAttachmentCommand(getAttachmentHelpOk: boolean): 'getAttachment' | 'fetchAttachment' {
+    return getAttachmentHelpOk ? 'getAttachment' : 'fetchAttachment';
 }
 
 /**
- * Downloads a single Signal attachment, transparently supporting both the
- * `getAttachment` (signal-cli < 0.14) and `fetchAttachment` (0.14+) command
- * names.
+ * Runs `signal-cli <commandWord> --help` to check whether that attachment
+ * download subcommand exists in this local build. Only the exit status
+ * matters; output is discarded.
+ * @param {string} commandWord `getAttachment` or `fetchAttachment`.
+ * @return {Promise<boolean>} True if the subcommand exists.
+ */
+function probeAttachmentCommand(commandWord: string): Promise<boolean> {
+    return new Promise(resolve => {
+        execFile(signalCliPath, [commandWord, '--help'], { encoding: 'utf8', timeout: 10000 },
+            (error, _sOut, _sErr) => resolve(error === null));
+    });
+}
+
+/**
+ * Detects which attachment-download subcommand (`getAttachment` or
+ * `fetchAttachment`) the installed signal-cli supports. When a probe result
+ * is supplied (tests) it is applied directly; otherwise the cached decision
+ * is used, or a `--help` probe runs once and the answer is cached for the
+ * session. This replaces guessing from error messages, which misfired on
+ * unrelated argument errors.
+ * @param {boolean} [getAttachmentHelpOk] Pre-supplied `getAttachment --help`
+ *   result for tests.
+ * @return {Promise<'getAttachment' | 'fetchAttachment'>} The command to use.
+ */
+export async function detectAttachmentCommand(getAttachmentHelpOk?: boolean): Promise<'getAttachment' | 'fetchAttachment'> {
+    if (getAttachmentHelpOk !== undefined) {
+        cachedAttachmentCommand = pickAttachmentCommand(getAttachmentHelpOk);
+    }
+    if (cachedAttachmentCommand === undefined) {
+        cachedAttachmentCommand = pickAttachmentCommand(await probeAttachmentCommand('getAttachment'));
+    }
+    return cachedAttachmentCommand;
+}
+
+/**
+ * Downloads a single Signal attachment, preferring the subcommand name
+ * detected via the `--help` probe. If that name still fails with a
+ * "no such command" style message, the other name is tried once as a final
+ * fallback.
  * @param {string[]} baseArgs Arguments after the command word (e.g. `--id`)
- * @return {Promise<{ stdout: Buffer; stderr: Buffer; }>}
+ * @return {Promise<{ stdout: Buffer; stderr: Buffer; }>} The command output.
  */
 async function runSignalCliGetAttachment(baseArgs: string[]): Promise<{ stdout: Buffer; stderr: Buffer; }> {
+    const preferred = await detectAttachmentCommand();
+    const fallback = preferred === 'getAttachment' ? 'fetchAttachment' : 'getAttachment';
+    const accountArgs = buildAttachmentAccountArgs(botPhoneNumber);
     try {
-        return await runSignalCliCommand(['getAttachment', ...baseArgs]);
+        return await runSignalCliCommand([...accountArgs, preferred, ...baseArgs]);
     } catch (e) {
-        if (shouldUseFetchAttachmentAlias(String(e))) {
-            return await runSignalCliCommand(['fetchAttachment', ...baseArgs]);
+        if (e instanceof Error && shouldUseFetchAttachmentAlias(e.message)) {
+            console.log(`signal-cli ${preferred} not available (${e.message}); retrying with ${fallback}`);
+            return await runSignalCliCommand([...accountArgs, fallback, ...baseArgs]);
         }
         throw e;
     }
 }
 
 /**
+ * Builds the account-pinning prefix (`-a <bot number>`) for
+ * `signal-cli` global options. signal-cli's argument parser only accepts the
+ * global `-a/--account` flag *before* the subcommand word, so these args
+ * must be prepended rather than mixed in with the `getAttachment` args.
+ * @param {string | undefined} botNumber The bot's own Signal number.
+ * @return {string[]} `['-a', botNumber]`, or empty when no number is set.
+ */
+export function buildAttachmentAccountArgs(botNumber: string | undefined): string[] {
+    return botNumber ? ['-a', botNumber] : [];
+}
+
+/**
  * Builds the signal-cli `getAttachment`/`fetchAttachment` argument array.
- * The account is pinned with `-a` (the bot's own number) so that multi-account
- * signal-cli configurations can resolve the account unambiguously; an empty
- * recipient is omitted rather than passed as an empty `--recipient` value.
+ * The account-pinning `-a` flag is handled separately as a global-option
+ * prefix (see `buildAttachmentAccountArgs`); an empty recipient is omitted
+ * rather than passed as an empty `--recipient` value.
  * @param {string} attachmentId The attachment id from the dataMessage.
  * @param {string} recipient The recipient number/UUID for direct messages (may be empty).
  * @param {string} groupId The group id (may be empty).
@@ -690,7 +837,6 @@ async function runSignalCliGetAttachment(baseArgs: string[]): Promise<{ stdout: 
  */
 export function buildGetAttachmentArgs(attachmentId: string, recipient: string, groupId: string): string[] {
     const args: string[] = ['--id', attachmentId];
-    if (botPhoneNumber) args.push('-a', botPhoneNumber);
     if (groupId) args.push('-g', groupId);
     else if (recipient) args.push('--recipient', recipient);
     return args;
@@ -701,7 +847,7 @@ export async function fetchAttachment(attachmentId: string, recipient: string, g
 
     const { stdout } = await runSignalCliGetAttachment(baseArgs);
 
-    const raw = stripPossibleJsonHeader(stdout);
+    const raw = decodeBase64IfNecessary(stripPossibleJsonHeader(stdout));
     const detected = detectImageMimeExt(raw);
     if (!detected) {
         throw new Error('fetchAttachment: response is not a recognized image; ' + (() => { try { return JSON.parse(stdout.toString('utf8')).message; } catch { return `first bytes: ${[...raw.subarray(0, 20)].map(b => '0x' + b.toString(16)).join(' ')}`; } })());
@@ -1317,19 +1463,12 @@ async function startBot() {
         rl.on('line', async (line) => {
             console.log(`RECEIVED: ` + line);
             // Parse signal-cli output and construct a signalMessage object
-            try {
-                const signalMessage: { envelope?: SignalEnvelope } = JSON.parse(line);
-                const envelope = signalMessage.envelope;
-                // TODO: support more message types such as images.
-                if (envelope?.dataMessage) {
-                    // Enqueue the message.
-                    receivedArray.push(envelope);
-                    console.log(`Enqueued.`);
-                }
-            } catch (parseError) {
-                console.log(parseError);
+            const envelope = parseReceiveLine(line);
+            if (envelope) {
+                // Enqueue the message.
+                receivedArray.push(envelope);
+                console.log(`Enqueued.`);
             }
-
         });
 
         // Sleep for a short time before receiving again.
