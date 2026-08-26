@@ -31,6 +31,7 @@ import {
     buildSendArgs,
     buildListContactsArgs,
     parseReceiveLine,
+    shouldRespondInGroup,
     clipThinkTags,
     extractContentAfterBotMention,
     SignalDataMessage,
@@ -480,6 +481,35 @@ console.log('parseReceiveLine — only real messages are enqueued');
     assert.equal(extractContentAfterBotMention('Eddie help me', 'eddie'), 'help me', 'match is case-insensitive (botName given lowercase)');
     assert.equal(extractContentAfterBotMention('@eddie web get http://x', 'eddie'), 'web get http://x', 'name-after-@ variant stripped');
     assert.equal(extractContentAfterBotMention('unrelated message', 'eddie'), 'unrelated message', 'no bot name → returned trimmed, unchanged');
+}
+
+// ---- shouldRespondInGroup: only messages that specifically address the bot trigger a reply ----
+{
+    const B = 'Eddie';
+    // Regression case from the field log: "Eddie" appears mid-sentence ("...in Eddie's code...")
+    // and the message carries an attachment, but never *addresses* the bot.
+    assert.equal(shouldRespondInGroup("Lore just coded a new feature in Eddie's code: the ability to receive images over Signal messenger", B, false), false,
+        'mid-sentence name ("Eddie\'s code") is not a mention');
+    assert.equal(shouldRespondInGroup('here is my breakfast photo', B, false), false,
+        'chatty group message with no bot reference → no reply');
+    assert.equal(shouldRespondInGroup('', B, false), false,
+        'empty text (attachment-only) must not trigger a reply on its own');
+
+    // Directed-at-bot cases → reply.
+    assert.equal(shouldRespondInGroup('anything', B, true), true,
+        'structured mention of the bot → reply even with unrelated text');
+    assert.equal(shouldRespondInGroup('eddie what time is it', B, false), true,
+        'message beginning with the bot name → reply');
+    assert.equal(shouldRespondInGroup('EDDIE, hey there', B, false), true,
+        'bot-name prefix match is case-insensitive');
+    assert.equal(shouldRespondInGroup('hey @eddie look at this', B, false), true,
+        'plain-text @botname anywhere → reply');
+    assert.equal(shouldRespondInGroup('@Eddie help', B, false), true,
+        'plain-text @<BotName> case-insensitive → reply');
+    assert.equal(shouldRespondInGroup('/clear', B, false), true,
+        'slash command (group admin control) → reply');
+    assert.equal(shouldRespondInGroup('eddie', 'eddie', false), true,
+        'exact bot-name message → reply');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

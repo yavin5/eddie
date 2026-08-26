@@ -228,6 +228,28 @@ export function extractContentAfterBotMention(content: string, botName: string):
 }
 
 /**
+ * Decides whether the bot should answer a *group* message. The bot only
+ * joins a group conversation when the message specifically addresses it: a
+ * structured mention of the bot by number/uuid, the message beginning with
+ * the bot's name, a plain-text `@<botname>`, or a slash command (so group
+ * admins keep control such as /ignore and /clear). A bare attachment, or a
+ * mid-sentence reference to the bot's name, must not trigger a reply.
+ * @param {string} content The message text.
+ * @param {string} botName The bot's display name (e.g. "Eddie").
+ * @param {boolean} hasBotMention True when signal-cli reported a structured
+ *   mention of this bot in the message.
+ * @return {boolean} True when the message is specifically directed at the bot.
+ */
+export function shouldRespondInGroup(content: string, botName: string, hasBotMention: boolean): boolean {
+    if (hasBotMention) return true;
+    const lower = (content || '').toLowerCase();
+    if (!lower) return false;
+    if (lower.startsWith(botName.toLowerCase())) return true;
+    if (lower.startsWith('/')) return true;
+    return lower.includes('@' + botName.toLowerCase());
+}
+
+/**
  * Parses one line of `signal-cli receive` JSON output. Returns the
  * envelope when it is present and carries a `dataMessage`, otherwise null
  * (the line is logged for diagnosis — e.g. a profile-update line has an
@@ -301,43 +323,23 @@ async function handleMessage(botName: string, envelope: SignalEnvelope): Promise
         // It's a group message.
         console.log(`GROUP MESSAGE. groupId=${groupId}`);
         // TODO: Support: "@Bot message" or "Bot: message" or "Bot message" (?)
-        // For now, support @Bot mentions and cases where the message begins
-        // with the bot name, only.
-        // Check to see if it was a mention of the bot.
-        let handledByMention = false;
-        if (dataMessage.mentions) {
-            const mention = dataMessage.mentions.find((mention) =>
+        // Respond only when the message specifically addresses the bot
+        // (structured mention, leading bot name, plain-text @botname, or a
+        // slash command); a bare attachment must not trigger a reply.
+        const hasBotMention = !!(dataMessage.mentions &&
+            dataMessage.mentions.find((mention) =>
                 mention.number === botPhoneNumber ||
-                mention.uuid === botPhoneNumber);
-            if (mention || imagePaths.length > 0) {
-                // Handle any slash commands.
-                const handled = await handleSlashCommands(content, groupId, timestamp);
-                if (handled) return;
+                mention.uuid === botPhoneNumber));
 
-                console.log(`Saying this to LLM: ` + content);
-                const response = await queryLLM('user', content, groupId, false, imagePaths);
-                console.log(`Response from LLM : ` + response);
-                sendMessage(groupId, response);
-                handledByMention = true;
-            }
-        }
+        if (shouldRespondInGroup(content, botName, hasBotMention)) {
+            // Handle any slash commands.
+            const handled = await handleSlashCommands(content, groupId, timestamp);
+            if (handled) return;
 
-        // FIXME: should say else right here.
-        if (!handledByMention) {
-            // Check to see if the bot's name is on the front of the message,
-            // or @BotName (a plain text mention) is in the message somewhere.
-            if (content.toLowerCase().startsWith(botName.toLowerCase()) ||
-                content.toLowerCase().includes('@' + botName.toLowerCase()) ||
-                imagePaths.length > 0) {
-                // Handle any slash commands.
-                const handled = await handleSlashCommands(content, groupId, timestamp);
-                if (handled) return;
-
-                console.log(`Saying this to LLM: ` + content);
-                const response = await queryLLM('user', content, groupId, false, imagePaths);
-                console.log(`Response from LLM : ` + response);
-                sendMessage(groupId, response);
-            }
+            console.log(`Saying this to LLM: ` + content);
+            const response = await queryLLM('user', content, groupId, false, imagePaths);
+            console.log(`Response from LLM : ` + response);
+            sendMessage(groupId, response);
         }
     } else {
         // NOT a group message.
