@@ -193,9 +193,9 @@ function getBotName(): Promise<string> {
 export function buildSendArgs(mode: 'text' | 'attachment', message: string, recipient: string, botNumber: string): string[] {
     const flag: string = mode === 'text' ? '-m' : '--attachment';
     if (recipient.endsWith('=')) {
-        return ['-u', botNumber, 'send', flag, message, '-g', recipient];
+        return ['-u', botNumber, 'send', '-g', recipient, flag, message];
     }
-    return ['-u', botNumber, 'send', flag, message, recipient];
+    return ['-u', botNumber, 'send', recipient, flag, message];
 }
 
 // Send a message via signal-cli.
